@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import Mascot from '../entities/Mascot.js';
 import Obstacle, { OBSTACLE_TYPE } from '../entities/Obstacle.js';
 import Collectible from '../entities/Collectible.js';
+import GlitchMonster from '../entities/GlitchMonster.js';
 import ThemeManager from '../systems/ThemeManager.js';
 import {
   WIDTH, HEIGHT, COLORS, THEME, THEME_CONFIG,
@@ -55,14 +56,16 @@ export default class GameScene extends Phaser.Scene {
     // --- State ---
     this._obstacles        = [];
     this._collectibles     = [];
+    this._monsters         = [];
     this._gemsCollected    = 0;
     this._gameOver         = false;
     this._levelCleared     = false;
     this._spawnTimer       = 0;
     this._firstSpawnDelay  = 1400;
-    // Separate timer for free-floating chip spawns (independent of obstacles)
     this._chipTimer        = 0;
     this._chipInterval     = Phaser.Math.Between(3500, 5500);
+    this._monsterTimer     = 0;
+    this._monsterInterval  = Phaser.Math.Between(4000, 6000);
 
     // --- Mascot ---
     this._mascot = new Mascot(this);
@@ -127,6 +130,16 @@ export default class GameScene extends Phaser.Scene {
       this._spawnFreeChip();
     }
 
+    // --- Monster spawn timer (only on levels with monsters) ---
+    if (this.hasMonsters) {
+      this._monsterTimer += delta;
+      if (this._monsterTimer >= this._monsterInterval) {
+        this._monsterTimer    = 0;
+        this._monsterInterval = Phaser.Math.Between(4000, 6000);
+        this._spawnMonster();
+      }
+    }
+
     for (let i = this._obstacles.length - 1; i >= 0; i--) {
       const obs = this._obstacles[i];
       obs.update();
@@ -164,6 +177,22 @@ export default class GameScene extends Phaser.Scene {
         this._collectibles.splice(i, 1);
       }
     }
+
+    // --- Monsters ---
+    for (let i = this._monsters.length - 1; i >= 0; i--) {
+      const mon = this._monsters[i];
+      mon.update(delta);
+
+      if (mon.overlaps(mascotBounds)) {
+        this._triggerGameOver();
+        return;
+      }
+
+      if (mon.isOffscreen()) {
+        mon.destroy();
+        this._monsters.splice(i, 1);
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -192,7 +221,19 @@ export default class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Spawn a chip in open space, not tied to any obstacle.
+   * Spawn an independent GlitchMonster — picks top or bottom lane randomly.
+   * Completely separate from the obstacle spawn queue.
+   */
+  _spawnMonster() {
+    const lane    = Math.random() < 0.5 ? 'top' : 'bot';
+    const speed   = this.obstacleSpeed * 0.9;
+    const pattern = this.monsterPattern ?? 'straight';
+    const theme   = this._themeManager.theme;
+    const mon     = new GlitchMonster(this, lane, speed, pattern, theme);
+    this._monsters.push(mon);
+  }
+
+  /**
    * Tries multiple positions to avoid overlapping existing obstacles.
    */
   _spawnFreeChip() {
@@ -228,17 +269,6 @@ export default class GameScene extends Phaser.Scene {
     if (last && last._type !== OBSTACLE_TYPE.COLUMN) return OBSTACLE_TYPE.COLUMN;
 
     const roll = Math.random();
-    
-    // Level 3: monsters replace some mountains
-    if (this.hasMonsters) {
-      if (roll < 0.50) return OBSTACLE_TYPE.COLUMN;
-      if (roll < 0.65) return OBSTACLE_TYPE.MONSTER_TOP;
-      if (roll < 0.80) return OBSTACLE_TYPE.MONSTER_BOT;
-      if (roll < 0.90) return OBSTACLE_TYPE.MOUNTAIN_TOP;
-      return OBSTACLE_TYPE.MOUNTAIN_BOT;
-    }
-
-    // Levels 1-2: standard mix
     if (roll < 0.60) return OBSTACLE_TYPE.COLUMN;
     if (roll < 0.80) return OBSTACLE_TYPE.MOUNTAIN_TOP;
     return OBSTACLE_TYPE.MOUNTAIN_BOT;
@@ -250,11 +280,9 @@ export default class GameScene extends Phaser.Scene {
 
   /** Brief orange flash + score pop text when a chip is collected. */
   _spawnCollectFX(col) {
-    // Screen flash
     this.cameras.main.flash(120, 255, 153, 0, true);
 
-    // Floating +1 text
-    const txt = this.add.text(col._x, col._y - 10, '+CHIP!', {
+    const txt = this.add.text(col._gfx.x, col._gfx.y - 10, '+CHIP!', {
       fontSize: '20px',
       fontFamily: 'monospace',
       color: '#FF9900',
@@ -355,6 +383,7 @@ export default class GameScene extends Phaser.Scene {
     // Freeze everything
     this._obstacles.forEach(o => { o._speed = 0; });
     this._collectibles.forEach(c => { c._speed = 0; });
+    this._monsters.forEach(m => { m._speed = 0; });
 
     this._clearLabel.setText(
       `LEVEL ${this.levelNumber} CLEAR!\nCollect your candy at the booth!`

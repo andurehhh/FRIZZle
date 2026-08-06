@@ -16,8 +16,6 @@ export const OBSTACLE_TYPE = {
   COLUMN:       'column',
   MOUNTAIN_TOP: 'mountain_top',
   MOUNTAIN_BOT: 'mountain_bot',
-  MONSTER_TOP:  'monster_top',   // glitch monster hugging the top — player dives below
-  MONSTER_BOT:  'monster_bot',   // glitch monster hugging the bottom — player climbs above
 };
 
 export default class Obstacle {
@@ -44,8 +42,6 @@ export default class Obstacle {
       case OBSTACLE_TYPE.COLUMN:       this._buildColumn(x, gapY, gapSize, cfg); break;
       case OBSTACLE_TYPE.MOUNTAIN_TOP: this._buildMountainTop(x, cfg);           break;
       case OBSTACLE_TYPE.MOUNTAIN_BOT: this._buildMountainBot(x, cfg);           break;
-      case OBSTACLE_TYPE.MONSTER_TOP:  this._buildMonster(x, 'top', cfg);        break;
-      case OBSTACLE_TYPE.MONSTER_BOT:  this._buildMonster(x, 'bot', cfg);        break;
     }
   }
 
@@ -206,98 +202,6 @@ export default class Obstacle {
   // ---------------------------------------------------------------------------
   // Glitch Monster obstacle
   // ---------------------------------------------------------------------------
-
-  /**
-   * Monster obstacle — Ocho-inspired glitch enemy that hugs the top or bottom.
-   * Player must fly to the opposite side to avoid it.
-   */
-  _buildMonster(x, side, cfg) {
-    const isMatrix    = this._theme === THEME.MATRIX;
-    const bodyH       = Phaser.Math.Between(HEIGHT * 0.30, HEIGHT * 0.45);
-    const startY      = side === 'top' ? 0 : HEIGHT - bodyH;
-    const bodyColor   = isMatrix ? 0x1A1A2E : 0x1A2744;
-    const borderColor = isMatrix ? 0x00FF41 : COLORS.iceBlue;
-    const eyeColor    = isMatrix ? 0x00FF41 : COLORS.awsOrange;
-    const glitchColor = isMatrix ? 0xFF0040 : 0x00FFFF;
-    const bodyW       = OBSTACLE_WIDTH * 1.6;
-    const hw          = bodyW / 2;
-
-    const g = this._scene.add.graphics();
-
-    // Chromatic ghost
-    g.fillStyle(glitchColor, 0.3);
-    g.fillRect(x - hw + 5, startY + 3, bodyW, bodyH);
-
-    // Main body
-    g.fillStyle(bodyColor, 1);
-    g.fillRect(x - hw, startY, bodyW, bodyH);
-
-    // Border
-    g.lineStyle(3, borderColor, 1);
-    g.strokeRect(x - hw, startY, bodyW, bodyH);
-
-    // Noise lines
-    g.fillStyle(borderColor, 0.15);
-    for (let i = 0; i < 5; i++) {
-      const ly = startY + 10 + i * 14;
-      g.fillRect(x - hw + 4, ly, Phaser.Math.Between(20, bodyW - 8), 2);
-    }
-
-    // Eyes — 2 rows of 4
-    const eyeSize   = 7;
-    const eyeGapX   = 14;
-    const eyeGapY   = 13;
-    const eyeStartX = x - eyeGapX * 1.5;
-    const eyeStartY = startY + bodyH * 0.35;
-
-    g.fillStyle(eyeColor, 1);
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 4; col++) {
-        g.fillRect(eyeStartX + col * eyeGapX - eyeSize / 2, eyeStartY + row * eyeGapY, eyeSize, eyeSize);
-      }
-    }
-
-    // Pupils
-    g.fillStyle(bodyColor, 0.85);
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 4; col++) {
-        g.fillRect(eyeStartX + col * eyeGapX - 1, eyeStartY + row * eyeGapY + 2, 2, 2);
-      }
-    }
-
-    // Zigzag mouth near the open edge
-    const mouthY = side === 'top' ? startY + bodyH - 14 : startY + 10;
-    g.fillStyle(eyeColor, 0.9);
-    const zigzag = [0, 3, -2, 4, -1, 2, 0, -2, 3];
-    for (let i = 0; i < zigzag.length; i++) {
-      g.fillRect(x - 18 + i * 5, mouthY + zigzag[i], 4, 4);
-    }
-
-    // Scanlines
-    g.fillStyle(borderColor, 0.12);
-    for (let ly = startY + 5; ly < startY + bodyH; ly += 10) {
-      g.fillRect(x - hw + 2, ly, bodyW - 4, 2);
-    }
-
-    this._graphics.push(g);
-
-    // Hitbox — inset slightly from edges
-    const hitInset = 8;
-    this._hitRects.push({ x: x - hw + hitInset, y: startY, w: bodyW - hitInset * 2, h: bodyH });
-
-    // Alpha flicker for glitch feel
-    this._monsterFlickerTimer = this._scene.time.addEvent({
-      delay: Phaser.Math.Between(300, 700),
-      loop: true,
-      callback: () => {
-        if (this._speed === 0) return;
-        g.setAlpha(Phaser.Math.FloatBetween(0.75, 1.0));
-        this._scene.time.delayedCall(70, () => g.setAlpha(1));
-      },
-    });
-  }
-
-  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
@@ -311,13 +215,11 @@ export default class Obstacle {
     this._graphics.forEach(g => { g.x -= dx; });
     this._hitRects.forEach(r  => { r.x  -= dx; });
 
-    // Debug: draw hitboxes — red for obstacles, magenta for monsters
+    // Debug hitboxes — red for all obstacle types
     if (DEBUG_HITBOXES) {
       if (!this._debugGfx) this._debugGfx = this._scene.add.graphics();
       this._debugGfx.clear();
-      const isMonster = this._type === OBSTACLE_TYPE.MONSTER_TOP || this._type === OBSTACLE_TYPE.MONSTER_BOT;
-      const color = isMonster ? DEBUG_COLORS.MONSTER : DEBUG_COLORS.OBSTACLE;
-      this._debugGfx.lineStyle(2, color, 0.9);
+      this._debugGfx.lineStyle(2, DEBUG_COLORS.OBSTACLE, 0.9);
       this._hitRects.forEach(r => this._debugGfx.strokeRect(r.x, r.y, r.w, r.h));
     }
   }
@@ -358,6 +260,5 @@ export default class Obstacle {
   destroy() {
     this._graphics.forEach(g => g.destroy());
     this._debugGfx?.destroy();
-    this._monsterFlickerTimer?.remove();
   }
 }
