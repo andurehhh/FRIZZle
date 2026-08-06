@@ -1,23 +1,21 @@
-import Phaser from 'phaser';
-import { WIDTH, HEIGHT, COLORS } from '../config/constants.js';
+import GameScene from './GameScene.js';
+import { OBSTACLE_SPEED_L1, GAP_L1, THEME } from '../config/constants.js';
 
 /**
- * Level1 — placeholder stub.
- * Will be fleshed out on Day 3.
+ * Level 1 — ~3/10 difficulty | Ice/Snow theme
+ * Collect 3 SBG chips to clear. Wide gaps, slow speed.
+ * No monsters — pure intro level.
  */
-export default class Level1 extends Phaser.Scene {
+export default class Level1 extends GameScene {
   constructor() {
-    super({ key: 'Level1' });
-  }
-
-  create() {
-    this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COLORS.awsNavy);
-    this.add.text(WIDTH / 2, HEIGHT / 2, 'LEVEL 1 — Coming Day 3', {
-      fontSize: '32px',
-      fontFamily: 'monospace',
-      color: '#FF9900',
-    }).setOrigin(0.5);
-
-    this.input.once('pointerdown', () => this.scene.start('Attract'));
+    super('Level1');
+    this.obstacleSpeed   = OBSTACLE_SPEED_L1;
+    this.gapSize         = GAP_L1;
+    this.levelNumber     = 1;
+    this.nextSceneKey    = 'Level2';
+    this.gemsRequired    = 3;
+    this.initialTheme    = THEME.ICE;
+    this.themeAlternates = false;
+    this.hasMonsters     = false;
   }
 }

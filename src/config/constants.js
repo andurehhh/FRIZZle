@@ -12,6 +12,32 @@ export const COLORS = {
   black:       0x000000,
 };
 
+// Themes
+export const THEME = {
+  ICE:    'ice',
+  MATRIX: 'matrix',
+};
+
+export const THEME_CONFIG = {
+  ice: {
+    bgColor:        0x0D1B2A,  // deep cold navy
+    accentColor:    0xB3E5FC,  // ice blue
+    particleColor:  0xE0F7FA,  // snow white-blue
+    obstacleColor:  0xB3E5FC,
+    obstacleAccent: 0x80DEEA,
+  },
+  matrix: {
+    bgColor:        0x000000,  // pure black
+    accentColor:    0x00FF41,  // matrix green
+    particleColor:  0x00FF41,
+    obstacleColor:  0x00C853,
+    obstacleAccent: 0x69FF47,
+  },
+};
+
+// Theme switch interval in endless/level 3 (ms)
+export const THEME_SWITCH_INTERVAL = 22000;
+
 // Physics
 export const GRAVITY = 800;       // px/s²
 export const FLAP_VELOCITY = -380; // px/s (negative = up)
