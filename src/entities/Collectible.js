@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, THEME } from '../config/constants.js';
+import { COLORS, THEME, DEBUG_HITBOXES } from '../config/constants.js';
 
 /**
  * Collectible — the SBG chip token the player flies through to win a level.
@@ -11,25 +11,17 @@ import { COLORS, THEME } from '../config/constants.js';
  *   - Small "AWS smile" arc on the face
  *   - Color tinted by theme (orange/ice for ice mode, orange/green for matrix)
  *
- * Collision: manual AABB, same pattern as Obstacle.
+ * Debug: blue hitbox outline when DEBUG_HITBOXES = true in constants.js
  */
 export default class Collectible {
-  /**
-   * @param {Phaser.Scene} scene
-   * @param {number} x       - spawn x (right edge, will scroll left)
-   * @param {number} y       - vertical center of the gap
-   * @param {number} speed   - scroll speed px/s (matches current obstacle speed)
-   * @param {string} theme   - THEME.ICE or THEME.MATRIX
-   */
   constructor(scene, x, y, speed, theme = THEME.ICE) {
-    this._scene    = scene;
-    this._x        = x;
-    this._y        = y;
-    this._speed    = speed;
-    this._theme    = theme;
+    this._scene     = scene;
+    this._x         = x;
+    this._y         = y;
+    this._speed     = speed;
+    this._theme     = theme;
     this._collected = false;
-
-    this._size = 36; // chip body side length
+    this._size      = 36; // chip body side length
 
     this._gfx = scene.add.graphics();
     this._draw();
@@ -59,17 +51,17 @@ export default class Collectible {
   // ---------------------------------------------------------------------------
 
   _draw() {
-    const g    = this._gfx;
-    const s    = this._size;
-    const hs   = s / 2;
-    const x    = this._x;
-    const y    = this._y;
+    const g        = this._gfx;
+    const s        = this._size;
+    const hs       = s / 2;
+    const x        = this._x;
+    const y        = this._y;
     const isMatrix = this._theme === THEME.MATRIX;
 
-    const bodyColor  = COLORS.awsOrange;
-    const pinColor   = isMatrix ? 0x00FF41 : COLORS.iceBlue;
-    const faceColor  = isMatrix ? 0x000000 : 0x232F3E;
-    const glowColor  = isMatrix ? 0x00FF41 : COLORS.iceBlue;
+    const bodyColor = COLORS.awsOrange;
+    const pinColor  = isMatrix ? 0x00FF41 : COLORS.iceBlue;
+    const faceColor = isMatrix ? 0x000000 : 0x232F3E;
+    const glowColor = isMatrix ? 0x00FF41 : COLORS.iceBlue;
 
     g.clear();
 
@@ -80,14 +72,14 @@ export default class Collectible {
     // Pin legs — left side (3 pins)
     g.fillStyle(pinColor, 1);
     const pinW = 10, pinH = 5;
-    g.fillRect(x - hs - pinW, y - 10,  pinW, pinH);
-    g.fillRect(x - hs - pinW, y - 1,   pinW, pinH);
-    g.fillRect(x - hs - pinW, y + 8,   pinW, pinH);
+    g.fillRect(x - hs - pinW, y - 10, pinW, pinH);
+    g.fillRect(x - hs - pinW, y - 1,  pinW, pinH);
+    g.fillRect(x - hs - pinW, y + 8,  pinW, pinH);
 
     // Pin legs — right side (3 pins)
-    g.fillRect(x + hs,        y - 10,  pinW, pinH);
-    g.fillRect(x + hs,        y - 1,   pinW, pinH);
-    g.fillRect(x + hs,        y + 8,   pinW, pinH);
+    g.fillRect(x + hs, y - 10, pinW, pinH);
+    g.fillRect(x + hs, y - 1,  pinW, pinH);
+    g.fillRect(x + hs, y + 8,  pinW, pinH);
 
     // Chip body
     g.fillStyle(bodyColor, 1);
@@ -97,18 +89,18 @@ export default class Collectible {
     g.fillStyle(faceColor, 0.85);
     g.fillRoundedRect(x - hs + 6, y - hs + 6, s - 12, s - 12, 4);
 
-    // AWS-style smile / arc (simplified as two lines)
+    // AWS-style smile arc
     g.lineStyle(2, COLORS.awsOrange, 1);
     g.beginPath();
     g.arc(x, y + 2, 8, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false);
     g.strokePath();
 
-    // Two small dots for "eyes"
+    // Eyes
     g.fillStyle(COLORS.awsOrange, 1);
     g.fillCircle(x - 5, y - 4, 2.5);
     g.fillCircle(x + 5, y - 4, 2.5);
 
-    // "SBG" tiny label — rendered as 3 small pixel blocks (no font needed)
+    // "SBG" pixel label — 3 small blocks
     g.fillStyle(COLORS.awsOrange, 0.7);
     g.fillRect(x - 8, y + 12, 4, 3);
     g.fillRect(x - 2, y + 12, 4, 3);
@@ -121,37 +113,63 @@ export default class Collectible {
 
   update() {
     const dx = this._speed / 60;
-    this._x  -= dx;
-    this._gfx.x -= dx;
+    this._x      -= dx;
+    this._gfx.x  -= dx;
+
+    // Debug: blue hitbox outline
+    if (DEBUG_HITBOXES) {
+      if (!this._debugGfx) this._debugGfx = this._scene.add.graphics();
+      this._debugGfx.clear();
+      this._debugGfx.lineStyle(2, 0x00AAFF, 0.9);
+      const r  = this._size / 2 - 4;
+      const cx = this._x;
+      const cy = this._y + this._gfx.y;
+      this._debugGfx.strokeRect(cx - r, cy - r, r * 2, r * 2);
+    }
   }
 
   /**
    * Check if the mascot's bounds overlap this collectible's pickup zone.
-   * @param {Phaser.Geom.Rectangle} mascotBounds
-   * @returns {boolean}
+   * Tight hitbox — player must actually fly through the chip body.
    */
   overlaps(mascotBounds) {
     if (this._collected) return false;
-    const r = this._size / 2 + 8; // pickup radius — slightly larger than visual
+    const r  = this._size / 2 - 4;
     const cx = this._x;
-    const cy = this._y + (this._gfx.y - 0); // account for bob tween offset
+    const cy = this._y + this._gfx.y; // account for bob tween offset
     return (
-      mascotBounds.x < cx + r &&
-      mascotBounds.x + mascotBounds.width > cx - r &&
-      mascotBounds.y < cy + r &&
+      mascotBounds.x                    < cx + r &&
+      mascotBounds.x + mascotBounds.width  > cx - r &&
+      mascotBounds.y                    < cy + r &&
       mascotBounds.y + mascotBounds.height > cy - r
     );
   }
 
-  /** Call when collected — plays a pop animation then removes itself. */
+  /**
+   * Check if this chip would overlap any existing obstacle hitRects.
+   * Used during spawn to avoid visual collisions — tries a new position if true.
+   */
+  overlapsObstacles(obstacles) {
+    const r  = this._size / 2 + 10; // generous buffer so chip never touches obstacle visuals
+    const cx = this._x;
+    const cy = this._y;
+    return obstacles.some(obs =>
+      obs._hitRects.some(rect =>
+        cx - r < rect.x + rect.w &&
+        cx + r > rect.x          &&
+        cy - r < rect.y + rect.h &&
+        cy + r > rect.y
+      )
+    );
+  }
+
+  /** Pop animation + self-removal when collected. */
   collect() {
     if (this._collected) return;
     this._collected = true;
-
     this._tween?.stop();
     this._pulseTween?.stop();
 
-    // Pop + fade out
     this._scene.tweens.add({
       targets: this._gfx,
       scaleX: 2.2,
@@ -163,15 +181,14 @@ export default class Collectible {
     });
   }
 
-  isOffscreen() {
-    return this._x < -60;
-  }
+  isOffscreen() { return this._x < -60; }
 
   get collected() { return this._collected; }
 
   destroy() {
     this._tween?.stop();
     this._pulseTween?.stop();
+    this._debugGfx?.destroy();
     this._gfx.destroy();
   }
 }

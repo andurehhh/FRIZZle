@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import Mascot from '../entities/Mascot.js';
 import Obstacle, { OBSTACLE_TYPE } from '../entities/Obstacle.js';
 import Collectible from '../entities/Collectible.js';
-import GlitchMonster from '../entities/GlitchMonster.js';
 import ThemeManager from '../systems/ThemeManager.js';
 import {
   WIDTH, HEIGHT, COLORS, THEME, THEME_CONFIG,
@@ -56,15 +55,14 @@ export default class GameScene extends Phaser.Scene {
     // --- State ---
     this._obstacles        = [];
     this._collectibles     = [];
-    this._monsters         = [];
     this._gemsCollected    = 0;
     this._gameOver         = false;
     this._levelCleared     = false;
     this._spawnTimer       = 0;
     this._firstSpawnDelay  = 1400;
-    // Tracks whether the last spawned thing was an obstacle — monsters
-    // are only allowed after a clear gap (no obstacle in same spawn slot)
-    this._lastSpawnWasObstacle = false;
+    // Separate timer for free-floating chip spawns (independent of obstacles)
+    this._chipTimer        = 0;
+    this._chipInterval     = Phaser.Math.Between(3500, 5500);
 
     // --- Mascot ---
     this._mascot = new Mascot(this);
@@ -110,15 +108,23 @@ export default class GameScene extends Phaser.Scene {
 
     const mascotBounds = this._mascot.getBounds();
 
-    // --- Obstacles ---
+    // --- Obstacle spawn timer ---
     this._spawnTimer += delta;
-    const threshold = this._obstacles.length === 0 && this._collectibles.length === 0
+    const threshold = this._obstacles.length === 0
       ? this._firstSpawnDelay
       : OBSTACLE_INTERVAL;
 
     if (this._spawnTimer >= threshold) {
       this._spawnTimer = 0;
-      this._spawnNext();
+      this._spawnObstacle();
+    }
+
+    // --- Free-floating chip spawn timer ---
+    this._chipTimer += delta;
+    if (this._chipTimer >= this._chipInterval) {
+      this._chipTimer    = 0;
+      this._chipInterval = Phaser.Math.Between(3500, 5500);
+      this._spawnFreeChip();
     }
 
     for (let i = this._obstacles.length - 1; i >= 0; i--) {
@@ -129,8 +135,6 @@ export default class GameScene extends Phaser.Scene {
         this._triggerGameOver();
         return;
       }
-
-      if (obs.checkPassed(this._mascot.x)) { /* visual only, win is gem-based */ }
 
       if (obs.isOffscreen()) {
         obs.destroy();
@@ -156,25 +160,8 @@ export default class GameScene extends Phaser.Scene {
       }
 
       if (col.isOffscreen() || col.collected) {
-        // collected ones self-destroy via tween; offscreen ones need manual cleanup
         if (col.isOffscreen()) col.destroy();
         this._collectibles.splice(i, 1);
-      }
-    }
-
-    // --- Monsters ---
-    for (let i = this._monsters.length - 1; i >= 0; i--) {
-      const mon = this._monsters[i];
-      mon.update(delta);
-
-      if (mon.overlaps(mascotBounds)) {
-        this._triggerGameOver();
-        return;
-      }
-
-      if (mon.isOffscreen()) {
-        mon.destroy();
-        this._monsters.splice(i, 1);
       }
     }
   }
@@ -184,25 +171,15 @@ export default class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   /**
-   * Decides what to spawn this tick.
-   * Rule: monsters only spawn when the previous slot had NO obstacle.
-   * This guarantees the player is never hit by a monster AND an obstacle at once.
+   * Spawn an obstacle (pipe, mountain, or monster on Level 3).
+   * Monsters replace mountains in the spawn pool for variety.
    */
-  _spawnNext() {
+  _spawnObstacle() {
     const theme    = this._themeManager.theme;
     const themeCfg = this._themeManager.config;
-
-    // Monster-only slot: 20% chance when monsters enabled and last spawn was clear
-    if (this.hasMonsters && !this._lastSpawnWasObstacle && Math.random() < 0.20) {
-      this._spawnMonster();
-      this._lastSpawnWasObstacle = false;
-      return;
-    }
-
-    // Otherwise spawn an obstacle + maybe a collectible in its gap
-    const type   = this._pickObstacleType();
-    const margin = 110;
-    const gapY   = Phaser.Math.Between(
+    const type     = this._pickObstacleType();
+    const margin   = 110;
+    const gapY     = Phaser.Math.Between(
       margin + this.gapSize / 2,
       HEIGHT - margin - this.gapSize / 2
     );
@@ -212,43 +189,56 @@ export default class GameScene extends Phaser.Scene {
       this.obstacleSpeed, type, theme, themeCfg
     );
     this._obstacles.push(obs);
-    this._lastSpawnWasObstacle = true;
-
-    // Spawn a chip collectible in the gap of column obstacles
-    if (type === OBSTACLE_TYPE.COLUMN) {
-      const col = new Collectible(
-        this,
-        WIDTH + 60,    // same x as obstacle — it scrolls with the gap
-        gapY,          // dead center of the gap
-        this.obstacleSpeed,
-        theme
-      );
-      this._collectibles.push(col);
-    }
   }
 
-  _spawnMonster() {
-    const margin = 80;
-    const y = Phaser.Math.Between(margin, HEIGHT - margin);
-    const mon = new GlitchMonster(
-      this, y,
-      this.obstacleSpeed * 0.85, // slightly slower than obstacles
-      this.monsterPattern,
-      this._themeManager.theme
-    );
-    this._monsters.push(mon);
+  /**
+   * Spawn a chip in open space, not tied to any obstacle.
+   * Tries multiple positions to avoid overlapping existing obstacles.
+   */
+  _spawnFreeChip() {
+    const theme = this._themeManager.theme;
+    const margin = 90;
+    
+    // Try up to 5 positions to find one that doesn't overlap obstacles
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const y = Phaser.Math.Between(margin, HEIGHT - margin);
+      const testChip = new Collectible(this, WIDTH + 60, y, this.obstacleSpeed, theme);
+      
+      if (!testChip.overlapsObstacles(this._obstacles)) {
+        // Clean position found — keep this chip
+        this._collectibles.push(testChip);
+        return;
+      } else {
+        // Position overlaps — destroy test chip and try again
+        testChip.destroy();
+      }
+    }
+    
+    // All 5 attempts failed — skip spawning this chip
+    // (prevents infinite loops when screen is very crowded)
   }
 
   /**
    * Weighted obstacle type picker.
-   * 60% column, 20% mountain-top, 20% mountain-bottom.
-   * Never two mountains in a row.
+   * Level 3 with monsters: some mountains become monster obstacles.
+   * Otherwise: 60% column, 20% mountain-top, 20% mountain-bot.
    */
   _pickObstacleType() {
     const last = this._obstacles[this._obstacles.length - 1];
     if (last && last._type !== OBSTACLE_TYPE.COLUMN) return OBSTACLE_TYPE.COLUMN;
 
     const roll = Math.random();
+    
+    // Level 3: monsters replace some mountains
+    if (this.hasMonsters) {
+      if (roll < 0.50) return OBSTACLE_TYPE.COLUMN;
+      if (roll < 0.65) return OBSTACLE_TYPE.MONSTER_TOP;
+      if (roll < 0.80) return OBSTACLE_TYPE.MONSTER_BOT;
+      if (roll < 0.90) return OBSTACLE_TYPE.MOUNTAIN_TOP;
+      return OBSTACLE_TYPE.MOUNTAIN_BOT;
+    }
+
+    // Levels 1-2: standard mix
     if (roll < 0.60) return OBSTACLE_TYPE.COLUMN;
     if (roll < 0.80) return OBSTACLE_TYPE.MOUNTAIN_TOP;
     return OBSTACLE_TYPE.MOUNTAIN_BOT;
@@ -365,7 +355,6 @@ export default class GameScene extends Phaser.Scene {
     // Freeze everything
     this._obstacles.forEach(o => { o._speed = 0; });
     this._collectibles.forEach(c => { c._speed = 0; });
-    this._monsters.forEach(m => { m._speed = 0; });
 
     this._clearLabel.setText(
       `LEVEL ${this.levelNumber} CLEAR!\nCollect your candy at the booth!`

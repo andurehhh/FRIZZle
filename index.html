@@ -7,8 +7,61 @@
     <title>Frizzle — Flappy Game</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #232F3E; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-      #game-container { position: relative; }
+
+      body {
+        background: #232F3E;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      #game-container {
+        position: relative;
+      }
+
+      /*
+       * Grain filter — applied to <body> so it renders over everything
+       * including both light (ice) and dark (matrix) backgrounds.
+       *
+       * mix-blend-mode: hard-light works on both light and dark surfaces —
+       * unlike 'overlay' which disappears on near-black backgrounds.
+       *
+       * Tune opacity: 0.06 = subtle, 0.12 = noticeable retro, 0.18 = heavy
+       */
+      body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 99999;
+        opacity: 0.08;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        background-repeat: repeat;
+        background-size: 160px 160px;
+        mix-blend-mode: hard-light;
+      }
+
+      /*
+       * CRT scanlines — very subtle horizontal stripe pattern.
+       * Gives that retro monitor feel on the kiosk screen.
+       * Comment out the ::before block if it feels too heavy.
+       */
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 99998;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0px,
+          transparent 3px,
+          rgba(0, 0, 0, 0.045) 3px,
+          rgba(0, 0, 0, 0.045) 4px
+        );
+      }
     </style>
   </head>
   <body>

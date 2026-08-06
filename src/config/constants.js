@@ -20,11 +20,11 @@ export const THEME = {
 
 export const THEME_CONFIG = {
   ice: {
-    bgColor:        0x0D1B2A,  // deep cold navy
-    accentColor:    0xB3E5FC,  // ice blue
-    particleColor:  0xE0F7FA,  // snow white-blue
-    obstacleColor:  0xB3E5FC,
-    obstacleAccent: 0x80DEEA,
+    bgColor:        0xDDE8F0,  // muted snow-blue/white — feels cold and icy
+    accentColor:    0x5BA4CF,  // deeper ice blue for accents
+    particleColor:  0xFFFFFF,  // white snowflakes
+    obstacleColor:  0x8EC8E8,
+    obstacleAccent: 0xC8E6F5,
   },
   matrix: {
     bgColor:        0x000000,  // pure black
@@ -65,3 +65,12 @@ export const LEADERBOARD_MIN_SCORE = 0; // set after playtesting
 
 // Photo pool
 export const PHOTO_POOL_MAX = 20;
+
+// Debug — set to true to draw hitboxes as colored overlays during testing
+// RED = obstacle  |  BLUE = chip  |  MAGENTA = monster
+export const DEBUG_HITBOXES = false;
+export const DEBUG_COLORS = {
+  OBSTACLE:    0xFF0000,
+  COLLECTIBLE: 0x00AAFF,
+  MONSTER:     0xFF00FF,
+};
