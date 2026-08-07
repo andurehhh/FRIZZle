@@ -25,18 +25,10 @@ export default class Mascot extends Phaser.GameObjects.Container {
     const hasPhoto = scene.textures.exists('player-face');
 
     if (hasPhoto) {
-      // Create a circular masked image from the 'player-face' texture
-      this._faceImage = scene.add.image(4, -2, 'player-face');
-      this._faceImage.setDisplaySize(24, 24);
-
-      // Circular mask using a graphics object
-      const maskGfx = scene.make.graphics({ x: 0, y: 0, add: false });
-      maskGfx.fillCircle(0, 0, 12);
-      // The mask needs to be positioned in world coords — we'll update it in update()
-      this._faceMask = maskGfx.createGeometryMask();
-      this._faceImage.setMask(this._faceMask);
-      this._faceMaskGfx = maskGfx;
-
+      // Face fills the entire mascot body — photo is already circular from capture
+      // No mask needed since the source image is pre-cropped to a circle
+      this._faceImage = scene.add.image(0, 0, 'player-face');
+      this._faceImage.setDisplaySize(56, 56);
       this.add(this._faceImage);
     } else {
       // Placeholder white circle
@@ -79,14 +71,6 @@ export default class Mascot extends Phaser.GameObjects.Container {
     // Rotate to match velocity
     const angle = Phaser.Math.Clamp(this.body.velocity.y * 0.06, -25, 60);
     this.setAngle(angle);
-
-    // Update face mask position to track the container in world space
-    if (this._hasPhoto && this._faceMaskGfx) {
-      // The mask graphic needs to be at the world position of the face image
-      const worldX = this.x + 4; // face image local offset
-      const worldY = this.y - 2;
-      this._faceMaskGfx.setPosition(worldX, worldY);
-    }
   }
 
   _flap() {

@@ -10,7 +10,7 @@
  *   overlay.destroy();
  */
 
-const CIRCLE_SIZE = 180; // px — diameter of the face crop circle
+const CIRCLE_SIZE = 300; // px — diameter of the face crop circle
 
 export default class CameraCaptureOverlay {
   constructor() {
@@ -71,7 +71,7 @@ export default class CameraCaptureOverlay {
           width: ${CIRCLE_SIZE}px;
           height: ${CIRCLE_SIZE}px;
           object-fit: cover;
-          transform: scaleX(-1); /* mirror */
+          transform: scaleX(-1) scale(1.6); /* mirror + zoom in to match crop */
         }
         #camera-overlay .btn {
           font-family: "Press Start 2P", monospace;
@@ -113,7 +113,7 @@ export default class CameraCaptureOverlay {
       </div>
       <div>
         <button class="btn btn-capture" id="cam-capture">CAPTURE</button>
-        <button class="btn btn-skip" id="cam-skip">SKIP</button>
+        <button class="btn btn-skip" id="cam-skip">NO THANKS</button>
       </div>
       <div class="disclosure">
         Your photo may appear as an enemy for other players today.
@@ -176,10 +176,11 @@ export default class CameraCaptureOverlay {
     ctx.translate(CIRCLE_SIZE, 0);
     ctx.scale(-1, 1);
 
-    // Center-crop the video into the circle
+    // Center-crop the video into the circle — zoom in by using only the center 60%
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    const cropSize = Math.min(vw, vh);
+    const zoomFactor = 0.6; // use center 60% of the frame (more zoomed in)
+    const cropSize = Math.min(vw, vh) * zoomFactor;
     const sx = (vw - cropSize) / 2;
     const sy = (vh - cropSize) / 2;
 

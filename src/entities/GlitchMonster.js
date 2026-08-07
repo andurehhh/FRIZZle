@@ -144,7 +144,8 @@ export default class GlitchMonster {
   // ---------------------------------------------------------------------------
 
   /**
-   * Load a face data URL as a Phaser texture and display it centered on the monster.
+   * Load a face data URL and display it on the monster body with a dark glitch tint.
+   * Face fills the body area (above the legs) with an inverted/zombie look.
    */
   _loadFace(dataUrl) {
     const key = `monster-face-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -155,17 +156,29 @@ export default class GlitchMonster {
       if (this._dead) return;
       try {
         this._scene.textures.addImage(key, img);
-        this._faceImage = this._scene.add.image(this._gfx.x, this._gfx.y - 2, key);
-        this._faceImage.setDisplaySize(22, 22);
-        // Circular crop via geometry mask
-        const maskGfx = this._scene.make.graphics({ x: 0, y: 0, add: false });
-        maskGfx.fillCircle(0, 0, 11);
-        this._faceMask = maskGfx.createGeometryMask();
-        this._faceImage.setMask(this._faceMask);
-        this._faceMaskGfx = maskGfx;
+
+        // Face fills the body area (above the legs)
+        // Body is 40×32, legs are bottom 8px, so face area = 40×24
+        const faceSize = 28; // px — fills most of the body width
+        this._faceImage = this._scene.add.image(this._gfx.x, this._gfx.y - 4, key);
+        this._faceImage.setDisplaySize(faceSize, faceSize);
+
+        // Dark glitch tint — greenish/inverted zombie robot look
+        this._faceImage.setTint(0x44FF66); // green-shifted
+        this._faceImage.setAlpha(0.75);    // semi-transparent so body shows through
+        // Blend mode for that creepy inverted feel
+        this._faceImage.setBlendMode(Phaser.BlendModes.MULTIPLY);
+
+        // Add a dark overlay on top for extra zombie darkness
+        this._faceDarkOverlay = this._scene.add.rectangle(
+          this._gfx.x, this._gfx.y - 4,
+          faceSize, faceSize,
+          0x000000, 0.3
+        );
+
         this._faceKey = key;
       } catch (e) {
-        // Texture add can fail if scene was destroyed — ignore silently
+        // Texture add can fail if scene was destroyed
       }
     };
   }
@@ -187,13 +200,14 @@ export default class GlitchMonster {
       this._gfx.y = this._baseY + Math.sin(this._time * this._waveFreq) * this._waveAmp;
     }
 
-    // Move face image to match monster position
+    // Move face image + dark overlay to match monster position
     if (this._faceImage) {
       this._faceImage.x = this._gfx.x;
-      this._faceImage.y = this._gfx.y - 2;
-      if (this._faceMaskGfx) {
-        this._faceMaskGfx.setPosition(this._gfx.x, this._gfx.y - 2);
-      }
+      this._faceImage.y = this._gfx.y - 4;
+    }
+    if (this._faceDarkOverlay) {
+      this._faceDarkOverlay.x = this._gfx.x;
+      this._faceDarkOverlay.y = this._gfx.y - 4;
     }
 
     // Debug hitbox
@@ -237,6 +251,7 @@ export default class GlitchMonster {
     this._flickerTimer?.remove();
     this._debugGfx?.destroy();
     this._faceImage?.destroy();
+    this._faceDarkOverlay?.destroy();
     this._faceMaskGfx?.destroy();
     if (this._faceKey && this._scene.textures.exists(this._faceKey)) {
       this._scene.textures.remove(this._faceKey);

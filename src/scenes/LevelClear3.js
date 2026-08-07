@@ -79,7 +79,7 @@ export default class LevelClear3 extends Phaser.Scene {
     // --- Endless Mode button ---
     const endlessBtn = this._makeButton(WIDTH / 2, 450, 'PLAY ENDLESS MODE', COLORS.awsOrange, 300);
     endlessBtn.on('pointerdown', () => {
-      this.scene.start('Endless'); // Endless scene — built on Day 4
+      this.scene.start('CaptureScene', { destination: 'Endless' });
     });
 
     // --- Main Menu button ---
@@ -95,7 +95,7 @@ export default class LevelClear3 extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Keyboard shortcuts
-    this.input.keyboard.once('keydown-SPACE', () => this.scene.start('Endless'));
+    this.input.keyboard.once('keydown-SPACE', () => this.scene.start('CaptureScene', { destination: 'Endless' }));
     this.input.keyboard.once('keydown-ESC', () => this.scene.start('Attract'));
   }
 

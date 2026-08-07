@@ -20,6 +20,10 @@ const config = {
   height: HEIGHT,
   backgroundColor: '#232F3E',
   parent: 'game-container',
+  scale: {
+    mode: Phaser.Scale.FIT,         // scales canvas up to fill the window, keeps aspect ratio
+    autoCenter: Phaser.Scale.CENTER_BOTH, // centers in the viewport
+  },
   physics: {
     default: 'arcade',
     arcade: {
