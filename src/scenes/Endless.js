@@ -309,7 +309,7 @@ export default class Endless extends Phaser.Scene {
     this.cameras.main.shake(250, 0.01);
 
     this.time.delayedCall(1000, () => {
-      this.scene.start('EndlessGameOver', { score: this._score });
+      this.scene.start('NameInput', { score: this._score });
     });
   }
 }

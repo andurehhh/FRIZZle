@@ -21,6 +21,7 @@ export default class EndlessGameOver extends Phaser.Scene {
 
   init(data) {
     this._score = data.score ?? 0;
+    this._name  = data.name  ?? '???';
   }
 
   async create() {
@@ -32,7 +33,7 @@ export default class EndlessGameOver extends Phaser.Scene {
     let scores = [];
 
     try {
-      rank   = await Leaderboard.addScore('Player', this._score);
+      rank   = await Leaderboard.addScore(this._name, this._score);
       scores = await Leaderboard.getScores();
     } catch (e) {
       console.warn('Leaderboard unavailable:', e);
