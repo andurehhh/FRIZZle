@@ -2,181 +2,136 @@ import Phaser from 'phaser';
 import { WIDTH, HEIGHT, COLORS, THEME, DEBUG_HITBOXES, DEBUG_COLORS } from '../config/constants.js';
 
 /**
- * GlitchMonster — an independent enemy entity, completely separate from obstacles.
+ * GlitchMonster — small pixel-art space invader-style enemy.
  *
- * Spawns off the right edge, moves left on its own timer.
- * Occupies either the TOP lane or BOTTOM lane of the screen.
- * Player must be in the opposite half to avoid it.
+ * Visual: blocky invader shape (~40×32):
+ *   - Dark rectangular body
+ *   - Two tall vertical slit "eyes"
+ *   - 4 stubby legs on the bottom
+ *   - Chromatic ghost offset for glitch feel
  *
- * Lane definitions:
- *   'top' — monster fills y: 0 to laneH. Player must stay BELOW laneH.
- *   'bot' — monster fills y: HEIGHT-laneH to HEIGHT. Player must stay ABOVE.
+ * Movement: moves LEFT toward the player at a steady pace.
+ *   'straight' — constant left (Level 3)
+ *   'wavy'     — left + gentle vertical sine wave (Endless)
  *
- * Visuals: Ocho-inspired blocky body, 2 rows of 4 eyes, zigzag mouth,
- *          chromatic ghost offset, alpha flicker glitch effect.
- *
- * pattern:
- *   'straight' — constant left movement (Level 3)
- *   'wavy'     — left movement + gentle vertical oscillation (Endless)
+ * Spawns at random Y, moves independently of obstacles.
  */
 export default class GlitchMonster {
-  /**
-   * @param {Phaser.Scene} scene
-   * @param {'top'|'bot'} lane
-   * @param {number} speed   px/s horizontal
-   * @param {'straight'|'wavy'} pattern
-   * @param {string} theme   THEME.ICE | THEME.MATRIX
-   */
-  constructor(scene, lane, speed, pattern = 'straight', theme = THEME.MATRIX) {
+  constructor(scene, speed, pattern = 'straight', theme = THEME.MATRIX) {
     this._scene   = scene;
-    this._lane    = lane;
     this._speed   = speed;
     this._pattern = pattern;
     this._theme   = theme;
     this._dead    = false;
 
-    // Lane height — 35-45% of screen
-    this._laneH = Phaser.Math.Between(HEIGHT * 0.35, HEIGHT * 0.45);
+    // Size — small invader
+    this._bodyW = 40;
+    this._bodyH = 32;
 
-    // World position — gfx.x / gfx.y are the live coords
-    const spawnX = WIDTH + 80;
-    const spawnY = lane === 'top' ? 0 : HEIGHT - this._laneH;
+    // Spawn position — right edge, random Y within safe zone
+    const margin = 80;
+    const spawnY = Phaser.Math.Between(margin, HEIGHT - margin);
+
+    this._gfx = scene.add.graphics();
+    this._gfx.x = WIDTH + 50;
+    this._gfx.y = spawnY;
 
     // Wavy motion state
-    this._time     = Math.random() * Math.PI * 2; // random phase
+    this._time     = Math.random() * Math.PI * 2;
     this._baseY    = spawnY;
-    this._waveAmp  = 18;   // px — subtle, not too aggressive
-    this._waveFreq = 0.0018; // radians/ms
+    this._waveAmp  = 30;
+    this._waveFreq = 0.002;
 
-    // Build graphics — drawn at (0,0) relative to gfx, gfx.x/y = world pos
-    this._gfx = scene.add.graphics();
-    this._gfx.x = spawnX;
-    this._gfx.y = spawnY;
     this._draw();
 
-    // Glitch flicker timer
+    // Glitch flicker
     this._flickerTimer = scene.time.addEvent({
-      delay: Phaser.Math.Between(250, 600),
+      delay: Phaser.Math.Between(400, 900),
       loop: true,
       callback: () => {
         if (this._dead || this._speed === 0) return;
-        this._gfx.setAlpha(Phaser.Math.FloatBetween(0.65, 1.0));
-        scene.time.delayedCall(65, () => {
+        this._gfx.setAlpha(Phaser.Math.FloatBetween(0.6, 1.0));
+        scene.time.delayedCall(70, () => {
           if (!this._dead) this._gfx.setAlpha(1);
         });
       },
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Drawing — all coords relative to (0,0), gfx.x/y = world position
-  // ---------------------------------------------------------------------------
-
   _draw() {
-    const g           = this._gfx;
-    const isMatrix    = this._theme === THEME.MATRIX;
-    const laneH       = this._laneH;
-    const bodyW       = 90;   // fixed width — distinct from obstacle widths
-    const hw          = bodyW / 2;
+    const g  = this._gfx;
+    const bw = this._bodyW;
+    const bh = this._bodyH;
+    const hw = bw / 2;
+    const hh = bh / 2;
+    const isMatrix = this._theme === THEME.MATRIX;
 
-    const bodyColor   = isMatrix ? 0x0D0D1A : 0x0A1628;
-    const borderColor = isMatrix ? 0x00FF41 : COLORS.iceBlue;
+    const bodyColor   = 0x111111;
+    const ghostColor  = isMatrix ? 0xFF0040 : 0x00FFFF;
     const eyeColor    = isMatrix ? 0x00FF41 : COLORS.awsOrange;
-    const glitchColor = isMatrix ? 0xFF0040 : 0x00FFFF;
+    const legColor    = 0x111111;
 
     g.clear();
 
-    // Chromatic ghost (offset 4px right and down)
-    g.fillStyle(glitchColor, 0.28);
-    g.fillRect(-hw + 4, 4, bodyW, laneH);
+    // Chromatic ghost offset (3px right, 2px down)
+    g.fillStyle(ghostColor, 0.3);
+    g.fillRect(-hw + 3, -hh + 2, bw, bh - 6);
 
-    // Main body
+    // Main body — invader shape (stepped rectangle)
     g.fillStyle(bodyColor, 1);
-    g.fillRect(-hw, 0, bodyW, laneH);
+    // Top narrow section
+    g.fillRect(-hw + 6, -hh, bw - 12, 6);
+    // Middle wide section (main body)
+    g.fillRect(-hw, -hh + 6, bw, bh - 14);
+    // Bottom step-in before legs
+    g.fillRect(-hw + 4, -hh + bh - 14, bw - 8, 6);
 
-    // Border
-    g.lineStyle(3, borderColor, 1);
-    g.strokeRect(-hw, 0, bodyW, laneH);
-
-    // Noise texture lines
-    g.fillStyle(borderColor, 0.18);
-    for (let i = 0; i < 5; i++) {
-      const ly = 10 + i * Math.floor(laneH / 6);
-      const lw = Phaser.Math.Between(16, bodyW - 10);
-      g.fillRect(-hw + 5, ly, lw, 2);
-    }
-
-    // Eyes — 2 rows of 4, centered in the body
-    const eyeSize   = 7;
-    const eyeGapX   = 14;
-    const eyeGapY   = 14;
-    const eyeStartX = -(eyeGapX * 1.5);
-    const eyeStartY = laneH * 0.35;
-
+    // Eyes — two tall vertical white/green slits
     g.fillStyle(eyeColor, 1);
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 4; col++) {
-        g.fillRect(
-          eyeStartX + col * eyeGapX - eyeSize / 2,
-          eyeStartY + row * eyeGapY,
-          eyeSize, eyeSize
-        );
-      }
-    }
+    const eyeW = 6;
+    const eyeH = 12;
+    const eyeY = -hh + 10;
+    g.fillRect(-8, eyeY, eyeW, eyeH);  // left eye
+    g.fillRect(2,  eyeY, eyeW, eyeH);  // right eye
 
-    // Pupils
-    g.fillStyle(bodyColor, 0.85);
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 4; col++) {
-        g.fillRect(
-          eyeStartX + col * eyeGapX - 1,
-          eyeStartY + row * eyeGapY + 2,
-          2, 2
-        );
-      }
-    }
+    // Pupils — dark inner rectangles
+    g.fillStyle(bodyColor, 0.9);
+    g.fillRect(-6, eyeY + 4, 3, 5);
+    g.fillRect(4,  eyeY + 4, 3, 5);
 
-    // Zigzag mouth — on the leading edge (left side, facing the player)
-    const mouthY = laneH * 0.72;
-    g.fillStyle(eyeColor, 0.9);
-    const zigzag = [0, 3, -2, 4, -1, 2, 0, -2, 3];
-    for (let i = 0; i < zigzag.length; i++) {
-      g.fillRect(-18 + i * 5, mouthY + zigzag[i], 4, 4);
-    }
+    // Legs — 4 stubby rectangles hanging from bottom
+    g.fillStyle(legColor, 1);
+    const legW = 5;
+    const legH = 8;
+    const legY = hh - 8;
+    g.fillRect(-hw + 4,       legY, legW, legH);
+    g.fillRect(-hw + 12,      legY, legW, legH);
+    g.fillRect(hw - 12 - legW, legY, legW, legH);
+    g.fillRect(hw - 4 - legW,  legY, legW, legH);
 
-    // Scanlines
-    g.fillStyle(borderColor, 0.1);
-    for (let ly = 4; ly < laneH; ly += 10) {
-      g.fillRect(-hw + 2, ly, bodyW - 4, 2);
-    }
-
-    // Store body dimensions for hitbox
-    this._bodyW = bodyW;
-    this._bodyH = laneH;
+    // Small antenna nubs on top
+    g.fillRect(-hw + 8, -hh - 4, 3, 5);
+    g.fillRect(hw - 11, -hh - 4, 3, 5);
   }
 
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
-  /**
-   * @param {number} delta ms since last frame
-   */
   update(delta) {
     if (this._dead) return;
 
     this._time += delta;
 
-    // Horizontal movement
+    // Move left toward player
     this._gfx.x -= (this._speed / 1000) * delta;
 
-    // Vertical oscillation for wavy pattern
+    // Wavy vertical oscillation
     if (this._pattern === 'wavy') {
-      const offset = Math.sin(this._time * this._waveFreq) * this._waveAmp;
-      this._gfx.y  = this._baseY + offset;
+      this._gfx.y = this._baseY + Math.sin(this._time * this._waveFreq) * this._waveAmp;
     }
 
-    // Debug hitbox — magenta
+    // Debug hitbox
     if (DEBUG_HITBOXES) {
       if (!this._debugGfx) this._debugGfx = this._scene.add.graphics();
       this._debugGfx.clear();
@@ -186,29 +141,24 @@ export default class GlitchMonster {
     }
   }
 
-  /** Live world bounds — always accurate because we read gfx.x/y directly. */
   _getBounds() {
-    const inset = 8;
+    const inset = 4;
     return {
       x: this._gfx.x - this._bodyW / 2 + inset,
-      y: this._gfx.y,
+      y: this._gfx.y - this._bodyH / 2 + inset,
       w: this._bodyW - inset * 2,
-      h: this._bodyH,
+      h: this._bodyH - inset * 2,
     };
   }
 
-  /**
-   * AABB overlap against mascot bounds.
-   * @param {Phaser.Geom.Rectangle} mascotBounds
-   */
   overlaps(mascotBounds) {
     if (this._dead) return false;
     const b      = this._getBounds();
-    const margin = 5; // slight forgiveness
+    const margin = 4;
     return (
-      mascotBounds.x + margin                    < b.x + b.w &&
-      mascotBounds.x + mascotBounds.width - margin > b.x     &&
-      mascotBounds.y + margin                    < b.y + b.h &&
+      mascotBounds.x + margin                     < b.x + b.w &&
+      mascotBounds.x + mascotBounds.width - margin > b.x      &&
+      mascotBounds.y + margin                     < b.y + b.h &&
       mascotBounds.y + mascotBounds.height - margin > b.y
     );
   }

@@ -225,11 +225,10 @@ export default class GameScene extends Phaser.Scene {
    * Completely separate from the obstacle spawn queue.
    */
   _spawnMonster() {
-    const lane    = Math.random() < 0.5 ? 'top' : 'bot';
     const speed   = this.obstacleSpeed * 0.9;
     const pattern = this.monsterPattern ?? 'straight';
     const theme   = this._themeManager.theme;
-    const mon     = new GlitchMonster(this, lane, speed, pattern, theme);
+    const mon     = new GlitchMonster(this, speed, pattern, theme);
     this._monsters.push(mon);
   }
 
