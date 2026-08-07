@@ -58,6 +58,11 @@ export default class Endless extends Phaser.Scene {
     // --- Mascot ---
     this._mascot = new Mascot(this);
 
+    // --- Pause system ---
+    this._paused = false;
+    this._pauseOverlay = null;
+    this._escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+
     // --- Load face pool for enemy faces ---
     this._facePool = [];
     PhotoPool.getRandomPhotos(10).then(photos => {
@@ -87,6 +92,13 @@ export default class Endless extends Phaser.Scene {
 
   update(time, delta) {
     if (this._gameOver) return;
+
+    // Pause toggle
+    if (Phaser.Input.Keyboard.JustDown(this._escKey)) {
+      this._togglePause();
+      return;
+    }
+    if (this._paused) return;
 
     this._elapsedMs += delta;
     this._themeManager.update(delta);
@@ -151,12 +163,25 @@ export default class Endless extends Phaser.Scene {
 
     // --- Monsters ---
     this._monsterTimer += delta;
-    // Monsters get more frequent over time
-    const monInterval = Math.max(this._monsterInterval - this._elapsedMs * 0.01, 2000);
-    if (this._monsterTimer >= monInterval) {
+    // Spawn interval decreases with time: starts 4-5.5s, ramps down to 1.5s minimum
+    const diffProgress = Math.min(this._elapsedMs / 80000, 1); // 0→1 over 80s
+    const monIntervalMin = 1500;
+    const monIntervalMax = Phaser.Math.Linear(5500, 2000, diffProgress);
+    const monInterval = Math.max(monIntervalMin, monIntervalMax - (this._monsterTimer > 0 ? 0 : 0));
+
+    // Cap at 3 monsters on screen simultaneously
+    const canSpawn = this._monsters.length < 3;
+
+    if (this._monsterTimer >= monInterval && canSpawn) {
       this._monsterTimer    = 0;
-      this._monsterInterval = Phaser.Math.Between(3500, 5500);
+      this._monsterInterval = Phaser.Math.Between(
+        Math.round(monIntervalMin),
+        Math.round(monIntervalMax)
+      );
       this._spawnMonster(speed);
+    } else if (this._monsterTimer >= monInterval) {
+      // Cap reached — reset timer but don't spawn
+      this._monsterTimer = 0;
     }
 
     for (let i = this._monsters.length - 1; i >= 0; i--) {
@@ -169,6 +194,35 @@ export default class Endless extends Phaser.Scene {
     // Update difficulty indicator
     const pct = Math.min(100, Math.round((speed - ENDLESS_START_SPEED) / (ENDLESS_MAX_SPEED - ENDLESS_START_SPEED) * 100));
     this._diffText.setText(`DIFF: ${pct}%`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pause
+  // ---------------------------------------------------------------------------
+
+  _togglePause() {
+    this._paused = !this._paused;
+
+    if (this._paused) {
+      this.physics.pause();
+      this._pauseOverlay = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x000000, 0.7).setDepth(50);
+      this._pauseText = this.add.text(WIDTH / 2, HEIGHT / 2 - 20, 'PAUSED', {
+        fontSize: '36px',
+        fontFamily: FONT_TITLE,
+        color: '#FF9900',
+      }).setOrigin(0.5).setDepth(51);
+      this._pauseHint = this.add.text(WIDTH / 2, HEIGHT / 2 + 40, 'Press ESC to resume', {
+        fontSize: '22px',
+        fontFamily: FONT_BODY,
+        color: '#CCCCCC',
+      }).setOrigin(0.5).setDepth(51);
+    } else {
+      this.physics.resume();
+      this._pauseOverlay?.destroy();
+      this._pauseText?.destroy();
+      this._pauseHint?.destroy();
+      this._pauseOverlay = null;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -232,15 +286,29 @@ export default class Endless extends Phaser.Scene {
   _spawnMonster(speed) {
     const theme = this._themeManager.theme;
 
-    // Avoid zone from nearest column gap
-    let avoidZone = null;
+    // Collect ALL gap/safe zones from on-screen obstacles
+    const avoidZones = [];
     for (const obs of this._obstacles) {
       if (obs._type === 'column' && obs._hitRects.length >= 2) {
         const topRect = obs._hitRects[0];
         const botRect = obs._hitRects[1];
-        avoidZone = { minY: topRect.y + topRect.h - 20, maxY: botRect.y + 20 };
-        break;
+        avoidZones.push({ minY: topRect.y + topRect.h - 30, maxY: botRect.y + 30 });
       }
+      if (obs._type === 'mountain_top' && obs._hitRects.length >= 1) {
+        const rect = obs._hitRects[0];
+        avoidZones.push({ minY: rect.y + rect.h, maxY: rect.y + rect.h + 80 });
+      }
+      if (obs._type === 'mountain_bot' && obs._hitRects.length >= 1) {
+        const rect = obs._hitRects[0];
+        avoidZones.push({ minY: rect.y - 80, maxY: rect.y });
+      }
+    }
+
+    let avoidZone = null;
+    if (avoidZones.length > 0) {
+      const minY = Math.min(...avoidZones.map(z => z.minY));
+      const maxY = Math.max(...avoidZones.map(z => z.maxY));
+      avoidZone = { minY, maxY };
     }
 
     // ~50% chance to use a face from the pool (if available)

@@ -13,10 +13,12 @@
 const CIRCLE_SIZE = 300; // px — diameter of the face crop circle
 
 export default class CameraCaptureOverlay {
-  constructor() {
+  constructor(options = {}) {
     this._stream = null;
     this._container = null;
     this._resolve = null;
+    this._hasLastPhoto = options.hasLastPhoto ?? false;
+    this._lastPhotoUrl = options.lastPhotoUrl ?? null;
   }
 
   /**
@@ -90,6 +92,10 @@ export default class CameraCaptureOverlay {
           background: #333;
           color: #888;
         }
+        #camera-overlay .btn-last {
+          background: #00AA44;
+          color: #FFF;
+        }
         #camera-overlay .btn:hover { opacity: 0.85; }
         #camera-overlay .disclosure {
           font-family: "VT323", monospace;
@@ -113,6 +119,7 @@ export default class CameraCaptureOverlay {
       </div>
       <div>
         <button class="btn btn-capture" id="cam-capture">CAPTURE</button>
+        ${this._hasLastPhoto ? '<button class="btn btn-last" id="cam-last">USE LAST PHOTO</button>' : ''}
         <button class="btn btn-skip" id="cam-skip">NO THANKS</button>
       </div>
       <div class="disclosure">
@@ -127,6 +134,10 @@ export default class CameraCaptureOverlay {
     // Button listeners
     document.getElementById('cam-capture').addEventListener('click', () => this._capture());
     document.getElementById('cam-skip').addEventListener('click', () => this._skip());
+    const lastBtn = document.getElementById('cam-last');
+    if (lastBtn) {
+      lastBtn.addEventListener('click', () => this._useLast());
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -196,6 +207,12 @@ export default class CameraCaptureOverlay {
   _skip() {
     this._stopCamera();
     this._resolve(null);
+  }
+
+  _useLast() {
+    this._stopCamera();
+    // Return a special marker so CaptureScene knows to reuse the existing photo
+    this._resolve('__USE_LAST__');
   }
 
   _stopCamera() {

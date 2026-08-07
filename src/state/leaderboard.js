@@ -85,15 +85,7 @@ const Leaderboard = {
   async addScore(name, score) {
     await this.init();
 
-    // Get current top scores to determine rank
-    const current = await this.getScores();
-
-    // Check if this score qualifies for the leaderboard
-    if (current.length >= LEADERBOARD_SIZE && score <= current[current.length - 1].score) {
-      return null; // didn't make the cut
-    }
-
-    // Add the new entry
+    // Add the new entry — ALL plays are stored permanently
     const entry = {
       name,
       score,
@@ -108,52 +100,36 @@ const Leaderboard = {
       tx.onerror    = (e) => reject(e.target.error);
     });
 
-    // If we now have more than LEADERBOARD_SIZE, remove the lowest
-    const updated = await this.getScores();
-    if (updated.length > LEADERBOARD_SIZE) {
-      // Get all entries sorted ascending and delete the extras
-      await this._pruneExtras();
-    }
-
-    // Determine rank
-    const final = await this.getScores();
-    const rank  = final.findIndex(e => e.score === score && e.name === name && e.date === entry.date);
+    // Determine rank within top 10
+    const top = await this.getScores();
+    const rank = top.findIndex(e => e.score === score && e.name === name && e.date === entry.date);
     return rank >= 0 ? rank + 1 : null;
   },
 
   /**
-   * Remove entries beyond the top LEADERBOARD_SIZE.
+   * Get ALL scores ever recorded, sorted descending. Used by dev panel.
+   * @returns {Promise<Array<{ name: string, score: number, date: string }>>}
    */
-  async _pruneExtras() {
+  async getAllScores() {
+    await this.init();
     return new Promise((resolve, reject) => {
-      const tx    = _db.transaction(STORE_NAME, 'readwrite');
+      const tx    = _db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const index = store.index('score');
-      const req   = index.openCursor(null, 'next'); // ascending — lowest first
-      let count   = 0;
+      const req   = index.openCursor(null, 'prev');
+      const results = [];
 
-      // Count total first
-      const countReq = store.count();
-      countReq.onsuccess = () => {
-        const total   = countReq.result;
-        const toDelete = total - LEADERBOARD_SIZE;
-        if (toDelete <= 0) { resolve(); return; }
-
-        let deleted = 0;
-        const delReq = index.openCursor(null, 'next');
-        delReq.onsuccess = (e) => {
-          const cursor = e.target.result;
-          if (cursor && deleted < toDelete) {
-            cursor.delete();
-            deleted++;
-            cursor.continue();
-          } else {
-            resolve();
-          }
-        };
-        delReq.onerror = (e) => reject(e.target.error);
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
       };
-      countReq.onerror = (e) => reject(e.target.error);
+
+      req.onerror = (e) => reject(e.target.error);
     });
   },
 

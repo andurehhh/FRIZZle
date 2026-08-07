@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { WIDTH, HEIGHT } from './config/constants.js';
 
+// Dev admin panel — Ctrl+Shift+D to toggle
+import './ui/dev-panel.js';
+
 import Boot            from './scenes/Boot.js';
 import Attract         from './scenes/Attract.js';
 import CaptureScene    from './scenes/CaptureScene.js';

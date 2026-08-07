@@ -139,7 +139,7 @@ export default class Collectible {
    * Uses initial gfx.x / gfx.y since this is called right after construction.
    */
   overlapsObstacles(obstacles) {
-    const r  = this._size / 2 + 10;
+    const r  = this._size / 2 + 50; // large buffer — chip must be visually well clear of any obstacle
     const cx = this._gfx.x;
     const cy = this._gfx.y;
     return obstacles.some(obs =>

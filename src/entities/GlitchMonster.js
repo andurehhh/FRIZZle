@@ -32,10 +32,12 @@ export default class GlitchMonster {
     this._theme   = theme;
     this._dead    = false;
     this._faceDataUrl = faceDataUrl;
+    this._hasFace = !!faceDataUrl;
 
-    // Size — small invader
-    this._bodyW = 40;
-    this._bodyH = 32;
+    // Faced enemies are bigger and more prominent
+    const scale = faceDataUrl ? 1.5 : 1;
+    this._bodyW = Math.round(40 * scale);
+    this._bodyH = Math.round(32 * scale);
 
     // Spawn position — right edge, random Y avoiding the pipe gap zone
     const margin = 60;
@@ -157,28 +159,47 @@ export default class GlitchMonster {
       try {
         this._scene.textures.addImage(key, img);
 
-        // Face fills the body area (above the legs)
-        // Body is 40×32, legs are bottom 8px, so face area = 40×24
-        const faceSize = 28; // px — fills most of the body width
+        // Face fills the body area above the legs
+        const faceSize = Math.round(this._bodyW * 0.75);
+
+        // Glowing aura ring behind the face
+        this._faceAura = this._scene.add.circle(
+          this._gfx.x, this._gfx.y - 4,
+          faceSize / 2 + 6,
+          this._theme === THEME.MATRIX ? 0xFF0040 : 0x00FFFF,
+          0.6
+        );
+        // Pulse the aura
+        this._scene.tweens.add({
+          targets: this._faceAura,
+          scaleX: { from: 1, to: 1.3 },
+          scaleY: { from: 1, to: 1.3 },
+          alpha: { from: 0.6, to: 0.2 },
+          duration: 600,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+
+        // The face image
         this._faceImage = this._scene.add.image(this._gfx.x, this._gfx.y - 4, key);
         this._faceImage.setDisplaySize(faceSize, faceSize);
 
-        // Dark glitch tint — greenish/inverted zombie robot look
-        this._faceImage.setTint(0x44FF66); // green-shifted
-        this._faceImage.setAlpha(0.75);    // semi-transparent so body shows through
-        // Blend mode for that creepy inverted feel
+        // Dark glitch tint — zombie robot look
+        this._faceImage.setTint(0x44FF66);
+        this._faceImage.setAlpha(0.8);
         this._faceImage.setBlendMode(Phaser.BlendModes.MULTIPLY);
 
-        // Add a dark overlay on top for extra zombie darkness
-        this._faceDarkOverlay = this._scene.add.rectangle(
+        // Glowing border ring on top
+        this._faceRing = this._scene.add.circle(
           this._gfx.x, this._gfx.y - 4,
-          faceSize, faceSize,
-          0x000000, 0.3
-        );
+          faceSize / 2 + 2
+        ).setStrokeStyle(3, this._theme === THEME.MATRIX ? 0x00FF41 : 0xFF9900, 1)
+         .setFillStyle(0x000000, 0);
 
         this._faceKey = key;
       } catch (e) {
-        // Texture add can fail if scene was destroyed
+        // Scene destroyed — ignore
       }
     };
   }
@@ -200,14 +221,18 @@ export default class GlitchMonster {
       this._gfx.y = this._baseY + Math.sin(this._time * this._waveFreq) * this._waveAmp;
     }
 
-    // Move face image + dark overlay to match monster position
+    // Move face image + aura + ring to match monster position
     if (this._faceImage) {
       this._faceImage.x = this._gfx.x;
       this._faceImage.y = this._gfx.y - 4;
     }
-    if (this._faceDarkOverlay) {
-      this._faceDarkOverlay.x = this._gfx.x;
-      this._faceDarkOverlay.y = this._gfx.y - 4;
+    if (this._faceAura) {
+      this._faceAura.x = this._gfx.x;
+      this._faceAura.y = this._gfx.y - 4;
+    }
+    if (this._faceRing) {
+      this._faceRing.x = this._gfx.x;
+      this._faceRing.y = this._gfx.y - 4;
     }
 
     // Debug hitbox
@@ -251,8 +276,8 @@ export default class GlitchMonster {
     this._flickerTimer?.remove();
     this._debugGfx?.destroy();
     this._faceImage?.destroy();
-    this._faceDarkOverlay?.destroy();
-    this._faceMaskGfx?.destroy();
+    this._faceAura?.destroy();
+    this._faceRing?.destroy();
     if (this._faceKey && this._scene.textures.exists(this._faceKey)) {
       this._scene.textures.remove(this._faceKey);
     }

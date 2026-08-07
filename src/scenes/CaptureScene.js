@@ -106,7 +106,17 @@ export default class CaptureScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   async _openCamera() {
-    const overlay = new CameraCaptureOverlay();
+    // Check if there's an existing photo in the pool for "use last" option
+    let lastPhotoUrl = null;
+    try {
+      const photos = await PhotoPool.getPhotos();
+      if (photos.length > 0) lastPhotoUrl = photos[0].dataUrl;
+    } catch (e) {}
+
+    const overlay = new CameraCaptureOverlay({
+      hasLastPhoto: !!lastPhotoUrl,
+      lastPhotoUrl: lastPhotoUrl,
+    });
     let dataUrl = null;
 
     try {
@@ -117,30 +127,37 @@ export default class CaptureScene extends Phaser.Scene {
 
     overlay.destroy();
 
+    // Handle "use last photo" marker
+    if (dataUrl === '__USE_LAST__') {
+      // Reuse the most recent photo from the pool
+      if (lastPhotoUrl) {
+        if (this.textures.exists('player-face')) this.textures.remove('player-face');
+        const img = new Image();
+        img.src = lastPhotoUrl;
+        await new Promise(r => { img.onload = r; img.onerror = r; });
+        if (img.complete && img.naturalWidth > 0) {
+          this.textures.addImage('player-face', img);
+        }
+        this.registry.set('hasPlayerFace', true);
+      }
+      this._proceed();
+      return;
+    }
+
     if (dataUrl) {
-      // Store in photo pool for enemy faces
       try {
         await PhotoPool.addPhoto(dataUrl);
       } catch (e) {
         console.warn('PhotoPool store failed:', e);
       }
 
-      // Register/replace as Phaser texture
-      if (this.textures.exists('player-face')) {
-        this.textures.remove('player-face');
-      }
-
+      if (this.textures.exists('player-face')) this.textures.remove('player-face');
       const img = new Image();
       img.src = dataUrl;
-      await new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
-
+      await new Promise(r => { img.onload = r; img.onerror = r; });
       if (img.complete && img.naturalWidth > 0) {
         this.textures.addImage('player-face', img);
       }
-
       this.registry.set('hasPlayerFace', true);
     } else {
       this.registry.set('hasPlayerFace', false);

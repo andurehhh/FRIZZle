@@ -91,10 +91,22 @@ export default class GameScene extends Phaser.Scene {
       color: '#FF9900',
       align: 'center',
     }).setOrigin(0.5).setDepth(10);
+
+    // --- Pause system ---
+    this._paused = false;
+    this._pauseOverlay = null;
+    this._escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
   }
 
   update(time, delta) {
     if (this._gameOver || this._levelCleared) return;
+
+    // Pause toggle
+    if (Phaser.Input.Keyboard.JustDown(this._escKey)) {
+      this._togglePause();
+      return;
+    }
+    if (this._paused) return;
 
     // Theme tick
     this._themeManager.update(delta);
@@ -195,6 +207,39 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
+  // Pause
+  // ---------------------------------------------------------------------------
+
+  _togglePause() {
+    this._paused = !this._paused;
+
+    if (this._paused) {
+      // Freeze physics
+      this.physics.pause();
+
+      // Dark overlay + text
+      this._pauseOverlay = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x000000, 0.7).setDepth(50);
+      this._pauseText = this.add.text(WIDTH / 2, HEIGHT / 2 - 20, 'PAUSED', {
+        fontSize: '36px',
+        fontFamily: FONT_TITLE,
+        color: '#FF9900',
+      }).setOrigin(0.5).setDepth(51);
+      this._pauseHint = this.add.text(WIDTH / 2, HEIGHT / 2 + 40, 'Press ESC to resume', {
+        fontSize: '22px',
+        fontFamily: FONT_BODY,
+        color: '#CCCCCC',
+      }).setOrigin(0.5).setDepth(51);
+    } else {
+      // Resume
+      this.physics.resume();
+      this._pauseOverlay?.destroy();
+      this._pauseText?.destroy();
+      this._pauseHint?.destroy();
+      this._pauseOverlay = null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Spawning
   // ---------------------------------------------------------------------------
 
@@ -224,24 +269,44 @@ export default class GameScene extends Phaser.Scene {
    * Completely separate from the obstacle spawn queue.
    */
   _spawnMonster() {
-    const speed   = this.obstacleSpeed * 1.4; // faster than obstacles — feels like they're approaching
+    const speed   = this.obstacleSpeed * 1.4;
     const pattern = this.monsterPattern ?? 'straight';
     const theme   = this._themeManager.theme;
 
-    // Find the gap zone of the nearest on-screen column obstacle
-    // so monsters spawn above or below it, never blocking the path through pipes
-    let avoidZone = null;
+    // Collect ALL gap zones from on-screen column obstacles
+    // Monster must avoid ALL of them so the player always has a clear path
+    const avoidZones = [];
     for (const obs of this._obstacles) {
       if (obs._type === 'column' && obs._hitRects.length >= 2) {
-        // Gap is between the bottom of the top rect and the top of the bottom rect
         const topRect = obs._hitRects[0];
         const botRect = obs._hitRects[1];
-        avoidZone = {
-          minY: topRect.y + topRect.h - 20, // a bit above the gap
-          maxY: botRect.y + 20,              // a bit below the gap
-        };
-        break;
+        avoidZones.push({
+          minY: topRect.y + topRect.h - 30,
+          maxY: botRect.y + 30,
+        });
       }
+    }
+
+    // Also avoid mountains — their passable zone is the opposite half
+    for (const obs of this._obstacles) {
+      if (obs._type === 'mountain_top' && obs._hitRects.length >= 1) {
+        const rect = obs._hitRects[0];
+        // Safe zone is below the mountain — avoid that too
+        avoidZones.push({ minY: rect.y + rect.h, maxY: rect.y + rect.h + 80 });
+      }
+      if (obs._type === 'mountain_bot' && obs._hitRects.length >= 1) {
+        const rect = obs._hitRects[0];
+        // Safe zone is above the mountain
+        avoidZones.push({ minY: rect.y - 80, maxY: rect.y });
+      }
+    }
+
+    // Merge avoid zones into one combined range (take the widest span)
+    let avoidZone = null;
+    if (avoidZones.length > 0) {
+      const minY = Math.min(...avoidZones.map(z => z.minY));
+      const maxY = Math.max(...avoidZones.map(z => z.maxY));
+      avoidZone = { minY, maxY };
     }
 
     const mon = new GlitchMonster(this, speed, pattern, theme, avoidZone);
