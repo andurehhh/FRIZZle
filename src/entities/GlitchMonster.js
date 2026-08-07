@@ -185,10 +185,10 @@ export default class GlitchMonster {
         this._faceImage = this._scene.add.image(this._gfx.x, this._gfx.y - 4, key);
         this._faceImage.setDisplaySize(faceSize, faceSize);
 
-        // Dark glitch tint — zombie robot look
-        this._faceImage.setTint(0x44FF66);
-        this._faceImage.setAlpha(0.8);
-        this._faceImage.setBlendMode(Phaser.BlendModes.MULTIPLY);
+        // Light glitch tint — face clearly visible with subtle eerie shift
+        this._faceImage.setTint(0xCCFFDD); // very faint green, mostly shows the real face
+        this._faceImage.setAlpha(0.95);
+        this._faceImage.setBlendMode(Phaser.BlendModes.NORMAL);
 
         // Glowing border ring on top
         this._faceRing = this._scene.add.circle(

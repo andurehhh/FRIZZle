@@ -69,6 +69,17 @@ export const DATABIT_SCORE = 20;
 export const LEADERBOARD_SIZE = 10;
 export const LEADERBOARD_MIN_SCORE = 0; // set after playtesting
 
+// Collectible chip colors — randomized each spawn
+// When you swap to the AWS logo PNG, these become unused
+export const CHIP_COLORS = [
+  0xFF9900,  // AWS Orange
+  0x00C3FF,  // Cyan
+  0x00FF41,  // Matrix Green
+  0xFF6B6B,  // Coral Red
+  0xA855F7,  // Purple
+  0xFFD700,  // Gold
+];
+
 // Photo pool
 export const PHOTO_POOL_MAX = 20;
 

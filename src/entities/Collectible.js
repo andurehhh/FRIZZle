@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, THEME, DEBUG_HITBOXES } from '../config/constants.js';
+import { COLORS, THEME, DEBUG_HITBOXES, CHIP_COLORS } from '../config/constants.js';
 
 /**
  * Collectible — the SBG chip token the player flies through to win a level.
@@ -16,6 +16,9 @@ export default class Collectible {
     this._theme     = theme;
     this._collected = false;
     this._size      = 36;
+
+    // Pick a random color from the chip palette
+    this._chipColor = Phaser.Utils.Array.GetRandom(CHIP_COLORS);
 
     this._gfx = scene.add.graphics();
     // Position the graphics object at world coords
@@ -59,7 +62,7 @@ export default class Collectible {
     const x = 0;
     const y = 0;
 
-    const bodyColor = COLORS.awsOrange;
+    const bodyColor = this._chipColor;
     const pinColor  = isMatrix ? 0x00FF41 : COLORS.iceBlue;
     const faceColor = isMatrix ? 0x000000 : 0x232F3E;
     const glowColor = isMatrix ? 0x00FF41 : COLORS.iceBlue;
@@ -91,18 +94,18 @@ export default class Collectible {
     g.fillRoundedRect(x - hs + 6, y - hs + 6, s - 12, s - 12, 4);
 
     // AWS smile arc
-    g.lineStyle(2, COLORS.awsOrange, 1);
+    g.lineStyle(2, this._chipColor, 1);
     g.beginPath();
     g.arc(x, y + 2, 8, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false);
     g.strokePath();
 
     // Eyes
-    g.fillStyle(COLORS.awsOrange, 1);
+    g.fillStyle(this._chipColor, 1);
     g.fillCircle(x - 5, y - 4, 2.5);
     g.fillCircle(x + 5, y - 4, 2.5);
 
     // SBG pixel label
-    g.fillStyle(COLORS.awsOrange, 0.7);
+    g.fillStyle(this._chipColor, 0.7);
     g.fillRect(x - 8, y + 12, 4, 3);
     g.fillRect(x - 2, y + 12, 4, 3);
     g.fillRect(x + 4, y + 12, 4, 3);
@@ -135,21 +138,51 @@ export default class Collectible {
   }
 
   /**
-   * Check if this chip would visually overlap any obstacle hitRects at spawn time.
-   * Uses initial gfx.x / gfx.y since this is called right after construction.
+   * Check if this chip would overlap the SOLID parts of any obstacle.
+   * For column obstacles: the gap between top and bottom pipe is SAFE (chips can go there).
+   * For mountains: the entire rect is solid.
+   * Uses a moderate buffer so chips don't visually touch pipe edges.
    */
   overlapsObstacles(obstacles) {
-    const r  = this._size / 2 + 50; // large buffer — chip must be visually well clear of any obstacle
+    const buffer = 30; // moderate buffer around solid areas
     const cx = this._gfx.x;
     const cy = this._gfx.y;
-    return obstacles.some(obs =>
-      obs._hitRects.some(rect =>
-        cx - r < rect.x + rect.w &&
-        cx + r > rect.x          &&
-        cy - r < rect.y + rect.h &&
-        cy + r > rect.y
-      )
-    );
+
+    return obstacles.some(obs => {
+      // Only check obstacles within 200px horizontally
+      const obsX = obs._x ?? cx;
+      if (Math.abs(cx - obsX) > 200) return false;
+
+      if (obs._type === 'column' && obs._hitRects.length >= 2) {
+        // Column: two rects (top pipe and bottom pipe) with a gap between them
+        // Chip is ONLY overlapping if it's inside the top or bottom solid rect
+        const topRect = obs._hitRects[0];
+        const botRect = obs._hitRects[1];
+
+        const inTop = (
+          cx < topRect.x + topRect.w + buffer &&
+          cx > topRect.x - buffer &&
+          cy < topRect.y + topRect.h + buffer &&
+          cy > topRect.y - buffer
+        );
+        const inBot = (
+          cx < botRect.x + botRect.w + buffer &&
+          cx > botRect.x - buffer &&
+          cy < botRect.y + botRect.h + buffer && 
+          cy > botRect.y - buffer
+        );
+
+        return inTop || inBot;
+      } else {
+        // Mountains or other: entire rect is solid
+        return obs._hitRects.some(rect =>
+          cx < rect.x + rect.w + buffer &&
+          cx > rect.x - buffer &&
+          cy < rect.y + rect.h + buffer &&
+          cy > rect.y - buffer
+        );
+      }
+    });
   }
 
   /** Pop animation + self-removal when collected. */
