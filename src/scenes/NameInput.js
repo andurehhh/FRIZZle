@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
-import { WIDTH, HEIGHT, COLORS } from '../config/constants.js';
+import { WIDTH, HEIGHT, COLORS, FONT_TITLE, FONT_BODY } from '../config/constants.js';
 
 /**
- * NameInput — retro arcade-style 3-letter name entry after Endless mode.
+ * NameInput — free-type name entry after Endless mode.
  *
- * Player types 3 characters on the keyboard (A–Z, 0–9).
- * Backspace to delete. Enter to confirm early (if 1+ chars entered).
- * Auto-submits after 3 characters are typed.
- * Auto-advances after 15 seconds if idle (saves whatever they have, or "???").
+ * Player types their name on keyboard (any characters).
+ * No character limit — but leaderboard display truncates at 15 chars.
+ * Backspace to delete. Enter to confirm (must have 1+ chars).
+ * Auto-advances after 20s if idle.
  *
  * Receives: { score: number }
  * Passes to EndlessGameOver: { score, name }
@@ -22,62 +22,71 @@ export default class NameInput extends Phaser.Scene {
   }
 
   create() {
-    this._chars = [];
+    this._name = '';
     this._submitted = false;
 
     // Background
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x0A0A14);
 
     // Title
-    this.add.text(WIDTH / 2, 140, 'ENTER YOUR NAME', {
-      fontSize: '42px',
-      fontFamily: 'monospace',
+    this.add.text(WIDTH / 2, 120, 'ENTER YOUR NAME', {
+      fontSize: '28px',
+      fontFamily: FONT_TITLE,
       color: '#FF9900',
-      fontStyle: 'bold',
+      padding: { top: 4 },
     }).setOrigin(0.5);
 
-    // Score reminder
-    this.add.text(WIDTH / 2, 200, `SCORE: ${this._score}`, {
-      fontSize: '26px',
-      fontFamily: 'monospace',
+    // Score
+    this.add.text(WIDTH / 2, 190, `SCORE: ${this._score}`, {
+      fontSize: '28px',
+      fontFamily: FONT_BODY,
       color: '#B3E5FC',
     }).setOrigin(0.5);
 
-    // Character slots display
-    this._slotText = this.add.text(WIDTH / 2, HEIGHT / 2, '_ _ _', {
-      fontSize: '80px',
-      fontFamily: 'monospace',
+    // Name display — rendered as typed text with a blinking cursor
+    this._nameText = this.add.text(WIDTH / 2, HEIGHT / 2, '', {
+      fontSize: '36px',
+      fontFamily: FONT_BODY,
       color: '#FFFFFF',
-      fontStyle: 'bold',
+      padding: { top: 4 },
     }).setOrigin(0.5);
 
-    // Blinking cursor effect
+    // Blinking cursor character
+    this._cursor = this.add.text(WIDTH / 2, HEIGHT / 2, '|', {
+      fontSize: '36px',
+      fontFamily: FONT_BODY,
+      color: '#00FF41',
+    }).setOrigin(0, 0.5);
+
     this.tweens.add({
-      targets: this._slotText,
-      alpha: 0.7,
-      duration: 500,
+      targets: this._cursor,
+      alpha: 0,
+      duration: 450,
       yoyo: true,
       repeat: -1,
     });
 
+    // Input line underline
+    this._underline = this.add.rectangle(WIDTH / 2, HEIGHT / 2 + 28, 400, 3, 0x666666);
+
     // Instructions
-    this.add.text(WIDTH / 2, HEIGHT / 2 + 80, 'TYPE 3 LETTERS', {
-      fontSize: '20px',
-      fontFamily: 'monospace',
+    this.add.text(WIDTH / 2, HEIGHT / 2 + 65, 'TYPE YOUR NAME AND PRESS ENTER', {
+      fontSize: '22px',
+      fontFamily: FONT_BODY,
       color: '#888888',
     }).setOrigin(0.5);
 
-    this.add.text(WIDTH / 2, HEIGHT / 2 + 115, 'BACKSPACE to delete  |  ENTER to confirm', {
-      fontSize: '14px',
-      fontFamily: 'monospace',
+    this.add.text(WIDTH / 2, HEIGHT / 2 + 100, 'Use your real name or social handle so we can find you!', {
+      fontSize: '20px',
+      fontFamily: FONT_BODY,
       color: '#555555',
     }).setOrigin(0.5);
 
-    // Keyboard listener — A-Z, 0-9, Backspace, Enter
+    // Keyboard listener
     this.input.keyboard.on('keydown', this._onKey, this);
 
-    // Auto-advance timeout (15 seconds)
-    this._timeout = this.time.delayedCall(15000, () => {
+    // Auto-advance timeout (20s)
+    this._timeout = this.time.delayedCall(20000, () => {
       if (!this._submitted) this._submit();
     });
   }
@@ -85,43 +94,35 @@ export default class NameInput extends Phaser.Scene {
   _onKey(event) {
     if (this._submitted) return;
 
-    const key = event.key.toUpperCase();
+    // Enter — confirm
+    if (event.keyCode === 13) {
+      if (this._name.length > 0) this._submit();
+      return;
+    }
 
     // Backspace — delete last char
     if (event.keyCode === 8) {
-      if (this._chars.length > 0) {
-        this._chars.pop();
+      if (this._name.length > 0) {
+        this._name = this._name.slice(0, -1);
         this._updateDisplay();
       }
       return;
     }
 
-    // Enter — confirm early if at least 1 char
-    if (event.keyCode === 13) {
-      if (this._chars.length > 0) {
-        this._submit();
-      }
-      return;
-    }
+    // Ignore control keys, function keys, etc.
+    if (event.key.length !== 1) return;
 
-    // Only accept A-Z and 0-9
-    if (/^[A-Z0-9]$/.test(key) && this._chars.length < 3) {
-      this._chars.push(key);
-      this._updateDisplay();
-
-      // Auto-submit on 3rd character
-      if (this._chars.length === 3) {
-        this.time.delayedCall(300, () => this._submit());
-      }
-    }
+    // Add character (no hard limit — leaderboard display handles truncation)
+    this._name += event.key;
+    this._updateDisplay();
   }
 
   _updateDisplay() {
-    const display = [];
-    for (let i = 0; i < 3; i++) {
-      display.push(this._chars[i] ?? '_');
-    }
-    this._slotText.setText(display.join(' '));
+    this._nameText.setText(this._name);
+
+    // Position cursor at end of text
+    const textWidth = this._nameText.width;
+    this._cursor.x = WIDTH / 2 + textWidth / 2 + 2;
   }
 
   _submit() {
@@ -129,20 +130,16 @@ export default class NameInput extends Phaser.Scene {
     this._submitted = true;
     this._timeout?.remove();
 
-    const name = this._chars.length > 0 ? this._chars.join('') : '???';
+    const name = this._name.length > 0 ? this._name : 'Anonymous';
 
-    // Flash confirmation
-    this._slotText.setColor('#00FF41');
-    this.tweens.killTweensOf(this._slotText);
-    this._slotText.setAlpha(1);
-
+    // Confirm flash
+    this._nameText.setColor('#00FF41');
+    this._cursor.setAlpha(0);
+    this._underline.setFillStyle(0x00FF41);
     this.cameras.main.flash(200, 0, 255, 65);
 
     this.time.delayedCall(600, () => {
-      this.scene.start('EndlessGameOver', {
-        score: this._score,
-        name:  name,
-      });
+      this.scene.start('EndlessGameOver', { score: this._score, name });
     });
   }
 }

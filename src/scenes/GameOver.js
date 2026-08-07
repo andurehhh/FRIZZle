@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { WIDTH, HEIGHT, COLORS } from '../config/constants.js';
+import { WIDTH, HEIGHT, COLORS, FONT_TITLE, FONT_BODY } from '../config/constants.js';
 
 /**
  * GameOver — shown when the mascot dies.
@@ -24,18 +24,16 @@ export default class GameOver extends Phaser.Scene {
     // Dim overlay
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COLORS.awsNavy, 0.92);
 
-    // "GAME OVER" title
     this.add.text(WIDTH / 2, HEIGHT / 2 - 160, 'GAME OVER', {
-      fontSize: '72px',
-      fontFamily: 'monospace',
+      fontSize: '42px',
+      fontFamily: FONT_TITLE,
       color: '#FF3333',
-      fontStyle: 'bold',
     }).setOrigin(0.5);
 
     // Sub-line
     this.add.text(WIDTH / 2, HEIGHT / 2 - 80, `You crashed on Level ${this._levelNumber}`, {
-      fontSize: '26px',
-      fontFamily: 'monospace',
+      fontSize: '24px',
+      fontFamily: FONT_BODY,
       color: '#B3E5FC',
     }).setOrigin(0.5);
 
@@ -55,10 +53,9 @@ export default class GameOver extends Phaser.Scene {
     this.input.keyboard.once('keydown-R', () => this.scene.start(this._fromLevel));
     this.input.keyboard.once('keydown-ESC', () => this.scene.start('Attract'));
 
-    // Hint text
-    this.add.text(WIDTH / 2, HEIGHT / 2 + 120, 'R — retry   |   ESC — main menu', {
-      fontSize: '16px',
-      fontFamily: 'monospace',
+    this.add.text(WIDTH / 2, HEIGHT / 2 + 120, 'R - retry   |   ESC - main menu', {
+      fontSize: '20px',
+      fontFamily: FONT_BODY,
       color: '#666666',
     }).setOrigin(0.5);
   }
@@ -76,10 +73,9 @@ export default class GameOver extends Phaser.Scene {
   _makeButton(x, y, label, color) {
     const bg = this.add.rectangle(x, y, 220, 56, color, 1).setInteractive({ useHandCursor: true });
     const text = this.add.text(x, y, label, {
-      fontSize: '22px',
-      fontFamily: 'monospace',
+      fontSize: '14px',
+      fontFamily: FONT_TITLE,
       color: '#232F3E',
-      fontStyle: 'bold',
     }).setOrigin(0.5);
 
     // Hover tint

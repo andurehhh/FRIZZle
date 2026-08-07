@@ -4,12 +4,13 @@ import Obstacle, { OBSTACLE_TYPE } from '../entities/Obstacle.js';
 import Collectible from '../entities/Collectible.js';
 import GlitchMonster from '../entities/GlitchMonster.js';
 import ThemeManager from '../systems/ThemeManager.js';
+import PhotoPool from '../state/photoPool.js';
 import {
   WIDTH, HEIGHT, COLORS, THEME, THEME_CONFIG,
   OBSTACLE_INTERVAL,
   ENDLESS_START_SPEED, ENDLESS_MAX_SPEED,
   ENDLESS_START_GAP, ENDLESS_MIN_GAP,
-  DATABIT_SCORE,
+  DATABIT_SCORE, FONT_TITLE, FONT_BODY,
 } from '../config/constants.js';
 
 /**
@@ -52,28 +53,34 @@ export default class Endless extends Phaser.Scene {
     this._chipInterval     = Phaser.Math.Between(2800, 4200);
     this._monsterTimer     = 0;
     this._monsterInterval  = Phaser.Math.Between(3500, 5500);
+    this._scoreTickTimer   = 0; // accumulates ms for time-based scoring
 
     // --- Mascot ---
     this._mascot = new Mascot(this);
 
+    // --- Load face pool for enemy faces ---
+    this._facePool = [];
+    PhotoPool.getRandomPhotos(10).then(photos => {
+      this._facePool = photos;
+    }).catch(() => {});
+
     // --- HUD ---
     this._scoreText = this.add.text(24, 28, 'SCORE: 0', {
-      fontSize: '24px',
-      fontFamily: 'monospace',
+      fontSize: '16px',
+      fontFamily: FONT_TITLE,
       color: '#FF9900',
-      fontStyle: 'bold',
     }).setOrigin(0, 0).setDepth(10);
 
     this.add.text(WIDTH / 2, 28, 'ENDLESS MODE', {
-      fontSize: '20px',
-      fontFamily: 'monospace',
+      fontSize: '12px',
+      fontFamily: FONT_TITLE,
       color: '#FFFFFF',
     }).setOrigin(0.5, 0).setDepth(10);
 
     // Difficulty indicator
     this._diffText = this.add.text(WIDTH - 20, 28, '', {
-      fontSize: '16px',
-      fontFamily: 'monospace',
+      fontSize: '18px',
+      fontFamily: FONT_BODY,
       color: '#666666',
     }).setOrigin(1, 0).setDepth(10);
   }
@@ -84,6 +91,14 @@ export default class Endless extends Phaser.Scene {
     this._elapsedMs += delta;
     this._themeManager.update(delta);
     this._mascot.update(time, delta);
+
+    // Time-based scoring: +1 point per second alive
+    this._scoreTickTimer += delta;
+    if (this._scoreTickTimer >= 1000) {
+      this._scoreTickTimer -= 1000;
+      this._score += 1;
+      this._scoreText.setText(`SCORE: ${this._score}`);
+    }
 
     // Off-screen kill
     if (this._mascot.y < 0 || this._mascot.y > HEIGHT) {
@@ -228,7 +243,13 @@ export default class Endless extends Phaser.Scene {
       }
     }
 
-    const mon = new GlitchMonster(this, speed * 1.3, 'wavy', theme, avoidZone);
+    // ~50% chance to use a face from the pool (if available)
+    let faceUrl = null;
+    if (this._facePool.length > 0 && Math.random() < 0.5) {
+      faceUrl = this._facePool[Math.floor(Math.random() * this._facePool.length)];
+    }
+
+    const mon = new GlitchMonster(this, speed * 1.3, 'wavy', theme, avoidZone, faceUrl);
     this._monsters.push(mon);
   }
 

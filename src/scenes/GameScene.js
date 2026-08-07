@@ -6,7 +6,7 @@ import GlitchMonster from '../entities/GlitchMonster.js';
 import ThemeManager from '../systems/ThemeManager.js';
 import {
   WIDTH, HEIGHT, COLORS, THEME, THEME_CONFIG,
-  OBSTACLE_INTERVAL,
+  OBSTACLE_INTERVAL, FONT_TITLE, FONT_BODY,
 } from '../config/constants.js';
 
 /**
@@ -72,23 +72,22 @@ export default class GameScene extends Phaser.Scene {
 
     // --- HUD ---
     this._levelLabel = this.add.text(WIDTH / 2, 28, `LEVEL ${this.levelNumber}`, {
-      fontSize: '22px',
-      fontFamily: 'monospace',
+      fontSize: '14px',
+      fontFamily: FONT_TITLE,
       color: '#FF9900',
-      fontStyle: 'bold',
     }).setOrigin(0.5, 0).setDepth(10);
 
-    // Gem counter — chip icon + count
+    // Gem counter
     this._gemText = this.add.text(24, 28,
       `CHIPS: ${this._gemsCollected} / ${this.gemsRequired}`, {
-      fontSize: '20px',
-      fontFamily: 'monospace',
+      fontSize: '22px',
+      fontFamily: FONT_BODY,
       color: '#FF9900',
     }).setOrigin(0, 0).setDepth(10);
 
     this._clearLabel = this.add.text(WIDTH / 2, HEIGHT / 2 - 40, '', {
-      fontSize: '32px',
-      fontFamily: 'monospace',
+      fontSize: '24px',
+      fontFamily: FONT_TITLE,
       color: '#FF9900',
       align: 'center',
     }).setOrigin(0.5).setDepth(10);
@@ -225,10 +224,27 @@ export default class GameScene extends Phaser.Scene {
    * Completely separate from the obstacle spawn queue.
    */
   _spawnMonster() {
-    const speed   = this.obstacleSpeed * 0.9;
+    const speed   = this.obstacleSpeed * 1.4; // faster than obstacles — feels like they're approaching
     const pattern = this.monsterPattern ?? 'straight';
     const theme   = this._themeManager.theme;
-    const mon     = new GlitchMonster(this, speed, pattern, theme);
+
+    // Find the gap zone of the nearest on-screen column obstacle
+    // so monsters spawn above or below it, never blocking the path through pipes
+    let avoidZone = null;
+    for (const obs of this._obstacles) {
+      if (obs._type === 'column' && obs._hitRects.length >= 2) {
+        // Gap is between the bottom of the top rect and the top of the bottom rect
+        const topRect = obs._hitRects[0];
+        const botRect = obs._hitRects[1];
+        avoidZone = {
+          minY: topRect.y + topRect.h - 20, // a bit above the gap
+          maxY: botRect.y + 20,              // a bit below the gap
+        };
+        break;
+      }
+    }
+
+    const mon = new GlitchMonster(this, speed, pattern, theme, avoidZone);
     this._monsters.push(mon);
   }
 

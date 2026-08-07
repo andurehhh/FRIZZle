@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { WIDTH, HEIGHT, COLORS } from '../config/constants.js';
+import { WIDTH, HEIGHT, COLORS, FONT_TITLE, FONT_BODY } from '../config/constants.js';
 
 /**
  * LevelClear3 — congratulations screen after beating Level 3.
@@ -41,12 +41,10 @@ export default class LevelClear3 extends Phaser.Scene {
       });
     }
 
-    // Title
     const title = this.add.text(WIDTH / 2, 140, 'ALL LEVELS COMPLETE!', {
-      fontSize: '56px',
-      fontFamily: 'monospace',
+      fontSize: '28px',
+      fontFamily: FONT_TITLE,
       color: '#FF9900',
-      fontStyle: 'bold',
     }).setOrigin(0.5);
 
     this.tweens.add({
@@ -57,26 +55,24 @@ export default class LevelClear3 extends Phaser.Scene {
       ease: 'Back.easeOut',
     });
 
-    // Prize message
     this.add.text(WIDTH / 2, 230, 'Collect your candy at the booth!', {
-      fontSize: '26px',
-      fontFamily: 'monospace',
+      fontSize: '22px',
+      fontFamily: FONT_BODY,
       color: '#B3E5FC',
     }).setOrigin(0.5);
 
     // Divider
     this.add.rectangle(WIDTH / 2, 280, 400, 2, COLORS.awsOrange, 0.5);
 
-    // Endless mode prompt
     this.add.text(WIDTH / 2, 330, 'Want to compete for SWAG?', {
-      fontSize: '24px',
-      fontFamily: 'monospace',
+      fontSize: '12px',
+      fontFamily: FONT_TITLE,
       color: '#FFFFFF',
     }).setOrigin(0.5);
 
     this.add.text(WIDTH / 2, 370, 'Top 10 scores on the leaderboard win prizes!', {
-      fontSize: '18px',
-      fontFamily: 'monospace',
+      fontSize: '20px',
+      fontFamily: FONT_BODY,
       color: '#AAAAAA',
     }).setOrigin(0.5);
 
@@ -92,10 +88,9 @@ export default class LevelClear3 extends Phaser.Scene {
       this.scene.start('Attract');
     });
 
-    // Social media reminder
     this.add.text(WIDTH / 2, HEIGHT - 50, 'Follow us to check if you won!', {
-      fontSize: '16px',
-      fontFamily: 'monospace',
+      fontSize: '18px',
+      fontFamily: FONT_BODY,
       color: '#666666',
     }).setOrigin(0.5);
 
@@ -109,10 +104,9 @@ export default class LevelClear3 extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     this.add.text(x, y, label, {
-      fontSize: '22px',
-      fontFamily: 'monospace',
+      fontSize: '12px',
+      fontFamily: FONT_TITLE,
       color: '#232F3E',
-      fontStyle: 'bold',
     }).setOrigin(0.5);
 
     bg.on('pointerover', () => bg.setAlpha(0.85));

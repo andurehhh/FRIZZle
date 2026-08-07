@@ -17,20 +17,39 @@ import { WIDTH, HEIGHT, COLORS, THEME, DEBUG_HITBOXES, DEBUG_COLORS } from '../c
  * Spawns at random Y, moves independently of obstacles.
  */
 export default class GlitchMonster {
-  constructor(scene, speed, pattern = 'straight', theme = THEME.MATRIX) {
+  /**
+   * @param {Phaser.Scene} scene
+   * @param {number} speed
+   * @param {'straight'|'wavy'} pattern
+   * @param {string} theme
+   * @param {object|null} avoidZone
+   * @param {string|null} faceDataUrl — if provided, renders a player face on the monster body
+   */
+  constructor(scene, speed, pattern = 'straight', theme = THEME.MATRIX, avoidZone = null, faceDataUrl = null) {
     this._scene   = scene;
     this._speed   = speed;
     this._pattern = pattern;
     this._theme   = theme;
     this._dead    = false;
+    this._faceDataUrl = faceDataUrl;
 
     // Size — small invader
     this._bodyW = 40;
     this._bodyH = 32;
 
-    // Spawn position — right edge, random Y within safe zone
-    const margin = 80;
-    const spawnY = Phaser.Math.Between(margin, HEIGHT - margin);
+    // Spawn position — right edge, random Y avoiding the pipe gap zone
+    const margin = 60;
+    let spawnY;
+
+    if (avoidZone) {
+      // avoidZone = { minY, maxY } — the gap area to stay out of
+      // Pick either above or below the gap
+      const above = Phaser.Math.Between(margin, Math.max(margin, avoidZone.minY - 40));
+      const below = Phaser.Math.Between(Math.min(HEIGHT - margin, avoidZone.maxY + 40), HEIGHT - margin);
+      spawnY = Math.random() < 0.5 ? above : below;
+    } else {
+      spawnY = Phaser.Math.Between(margin, HEIGHT - margin);
+    }
 
     this._gfx = scene.add.graphics();
     this._gfx.x = WIDTH + 50;
@@ -43,6 +62,12 @@ export default class GlitchMonster {
     this._waveFreq = 0.002;
 
     this._draw();
+
+    // If a face photo was provided, overlay it on the monster body
+    this._faceImage = null;
+    if (faceDataUrl) {
+      this._loadFace(faceDataUrl);
+    }
 
     // Glitch flicker
     this._flickerTimer = scene.time.addEvent({
@@ -115,6 +140,37 @@ export default class GlitchMonster {
   }
 
   // ---------------------------------------------------------------------------
+  // Face overlay
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Load a face data URL as a Phaser texture and display it centered on the monster.
+   */
+  _loadFace(dataUrl) {
+    const key = `monster-face-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const img = new Image();
+    img.src = dataUrl;
+
+    img.onload = () => {
+      if (this._dead) return;
+      try {
+        this._scene.textures.addImage(key, img);
+        this._faceImage = this._scene.add.image(this._gfx.x, this._gfx.y - 2, key);
+        this._faceImage.setDisplaySize(22, 22);
+        // Circular crop via geometry mask
+        const maskGfx = this._scene.make.graphics({ x: 0, y: 0, add: false });
+        maskGfx.fillCircle(0, 0, 11);
+        this._faceMask = maskGfx.createGeometryMask();
+        this._faceImage.setMask(this._faceMask);
+        this._faceMaskGfx = maskGfx;
+        this._faceKey = key;
+      } catch (e) {
+        // Texture add can fail if scene was destroyed — ignore silently
+      }
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
@@ -129,6 +185,15 @@ export default class GlitchMonster {
     // Wavy vertical oscillation
     if (this._pattern === 'wavy') {
       this._gfx.y = this._baseY + Math.sin(this._time * this._waveFreq) * this._waveAmp;
+    }
+
+    // Move face image to match monster position
+    if (this._faceImage) {
+      this._faceImage.x = this._gfx.x;
+      this._faceImage.y = this._gfx.y - 2;
+      if (this._faceMaskGfx) {
+        this._faceMaskGfx.setPosition(this._gfx.x, this._gfx.y - 2);
+      }
     }
 
     // Debug hitbox
@@ -171,6 +236,11 @@ export default class GlitchMonster {
     this._dead = true;
     this._flickerTimer?.remove();
     this._debugGfx?.destroy();
+    this._faceImage?.destroy();
+    this._faceMaskGfx?.destroy();
+    if (this._faceKey && this._scene.textures.exists(this._faceKey)) {
+      this._scene.textures.remove(this._faceKey);
+    }
     this._gfx.destroy();
   }
 }

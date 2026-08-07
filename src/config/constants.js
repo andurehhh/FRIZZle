@@ -2,6 +2,12 @@
 export const WIDTH = 1280;
 export const HEIGHT = 720;
 
+// Fonts — 8-bit pixel style (loaded via Google Fonts in index.html)
+// FONT_TITLE: blocky pixel font for headings, scores, big text
+// FONT_BODY: taller pixel font for instructions, body text, tables
+export const FONT_TITLE = '"Press Start 2P", monospace';
+export const FONT_BODY  = '"VT323", monospace';
+
 // Palette
 export const COLORS = {
   awsOrange:   0xFF9900,
@@ -59,7 +65,7 @@ export const ENDLESS_START_GAP   = 194;
 export const ENDLESS_MIN_GAP     = 140;
 
 // Scoring
-export const DATABIT_SCORE = 10;
+export const DATABIT_SCORE = 20;
 export const LEADERBOARD_SIZE = 10;
 export const LEADERBOARD_MIN_SCORE = 0; // set after playtesting
 

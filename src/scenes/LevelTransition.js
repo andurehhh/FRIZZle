@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { WIDTH, HEIGHT, THEME, THEME_CONFIG, COLORS } from '../config/constants.js';
+import { WIDTH, HEIGHT, THEME, THEME_CONFIG, COLORS, FONT_TITLE, FONT_BODY } from '../config/constants.js';
 
 /**
  * LevelTransition — brief interstitial between levels.
@@ -125,16 +125,14 @@ export default class LevelTransition extends Phaser.Scene {
   _showTitle() {
     // Big level number
     const title = this.add.text(WIDTH / 2, HEIGHT / 2 - 20, `LEVEL ${this._levelNumber}`, {
-      fontSize: '96px',
-      fontFamily: 'monospace',
+      fontSize: '64px',
+      fontFamily: FONT_TITLE,
       color: '#FF9900',
-      fontStyle: 'bold',
     }).setOrigin(0.5).setAlpha(0);
 
-    // "GET READY" subtext
     const sub = this.add.text(WIDTH / 2, HEIGHT / 2 + 60, 'GET READY', {
-      fontSize: '24px',
-      fontFamily: 'monospace',
+      fontSize: '28px',
+      fontFamily: FONT_BODY,
       color: '#FFFFFF',
     }).setOrigin(0.5).setAlpha(0);
 

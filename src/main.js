@@ -3,6 +3,7 @@ import { WIDTH, HEIGHT } from './config/constants.js';
 
 import Boot            from './scenes/Boot.js';
 import Attract         from './scenes/Attract.js';
+import CaptureScene    from './scenes/CaptureScene.js';
 import LevelTransition from './scenes/LevelTransition.js';
 import Level1          from './scenes/Level1.js';
 import Level2          from './scenes/Level2.js';
@@ -29,6 +30,7 @@ const config = {
   scene: [
     Boot,
     Attract,
+    CaptureScene,
     LevelTransition,
     Level1,
     Level2,
