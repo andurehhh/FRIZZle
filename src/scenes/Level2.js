@@ -17,5 +17,6 @@ export default class Level2 extends GameScene {
     this.initialTheme    = THEME.MATRIX;
     this.themeAlternates = false;
     this.hasMonsters     = false;
+    this.nextTheme       = THEME.ICE; // Level 3 starts with Ice
   }
 }

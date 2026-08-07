@@ -391,7 +391,16 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.flash(500, 255, 153, 0);
 
     this.time.delayedCall(3200, () => {
-      this.scene.start(this.nextSceneKey);
+      // If there's a transition scene to show (levels 1→2, 2→3), route through it
+      if (this.nextSceneKey !== 'LevelClear3' && this.nextSceneKey !== 'Endless') {
+        this.scene.start('LevelTransition', {
+          nextLevel:   this.nextSceneKey,
+          levelNumber: this.levelNumber + 1,
+          theme:       this.nextTheme ?? THEME.ICE,
+        });
+      } else {
+        this.scene.start(this.nextSceneKey);
+      }
     });
   }
 }

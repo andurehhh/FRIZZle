@@ -17,5 +17,6 @@ export default class Level1 extends GameScene {
     this.initialTheme    = THEME.ICE;
     this.themeAlternates = false;
     this.hasMonsters     = false;
+    this.nextTheme       = THEME.MATRIX; // Level 2 is Matrix themed
   }
 }
