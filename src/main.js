@@ -8,6 +8,8 @@ import Level1          from './scenes/Level1.js';
 import Level2          from './scenes/Level2.js';
 import Level3          from './scenes/Level3.js';
 import LevelClear3     from './scenes/LevelClear3.js';
+import Endless         from './scenes/Endless.js';
+import EndlessGameOver from './scenes/EndlessGameOver.js';
 import GameOver        from './scenes/GameOver.js';
 
 const config = {
@@ -31,8 +33,9 @@ const config = {
     Level2,
     Level3,
     LevelClear3,
+    Endless,
+    EndlessGameOver,
     GameOver,
-    // Endless — Day 4
   ],
 };
 
