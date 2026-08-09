@@ -68,7 +68,7 @@ export default class Attract extends Phaser.Scene {
     });
 
     // --- Bottom 1/3: tagline + prompt ---
-    this._tagline = this.add.text(WIDTH / 2, HEIGHT * 0.70, 'play the game and win prizes', {
+    this._tagline = this.add.text(WIDTH / 2, HEIGHT * 0.70, 'FLAP HARD, CRASH LESS, AND BREAK THE LIMITS!', {
       fontSize: '26px',
       fontFamily: FONT_BODY,
       color: '#333333',

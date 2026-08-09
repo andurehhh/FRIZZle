@@ -49,6 +49,9 @@ export default class Boot extends Phaser.Scene {
   }
 
   create() {
-    this.scene.start('Attract');
+    // Wait for Google Fonts before showing any text scenes
+    document.fonts.ready.then(() => {
+      this.scene.start('Attract');
+    });
   }
 }

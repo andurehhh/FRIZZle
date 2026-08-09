@@ -397,26 +397,47 @@ export default class GameScene extends Phaser.Scene {
   // FX
   // ---------------------------------------------------------------------------
 
-  /** Brief orange flash + score pop text when a chip is collected. */
+  /** Particle ring burst from mascot when chip collected. */
   _spawnCollectFX(col) {
-    this.cameras.main.flash(120, 255, 153, 0, true);
-
     // Pickup sound
     try { if (this.cache.audio.exists('pickup')) this.sound.play('pickup', { volume: 0.5 }); }
     catch (e) {}
 
-    const txt = this.add.text(col._gfx.x, col._gfx.y - 10, '+CHIP!', {
-      fontSize: '20px',
+    // Gold ring of particles expanding from the mascot
+    const mx = this._mascot.x;
+    const my = this._mascot.y;
+    const numParticles = 12;
+
+    for (let i = 0; i < numParticles; i++) {
+      const angle = (i / numParticles) * Math.PI * 2;
+      const dot = this.add.circle(mx, my, 5, 0xFFD700, 1).setDepth(20);
+
+      this.tweens.add({
+        targets: dot,
+        x: mx + Math.cos(angle) * 60,
+        y: my + Math.sin(angle) * 60,
+        alpha: 0,
+        scaleX: 0.3,
+        scaleY: 0.3,
+        duration: 450,
+        ease: 'Cubic.easeOut',
+        onComplete: () => dot.destroy(),
+      });
+    }
+
+    // Floating +CHIP! text
+    const txt = this.add.text(mx, my - 30, '+CHIP!', {
+      fontSize: '18px',
       fontFamily: 'monospace',
-      color: '#FF9900',
+      color: '#FFD700',
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(20);
 
     this.tweens.add({
       targets: txt,
-      y: txt.y - 48,
+      y: txt.y - 40,
       alpha: 0,
-      duration: 700,
+      duration: 600,
       ease: 'Cubic.easeOut',
       onComplete: () => txt.destroy(),
     });
