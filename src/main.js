@@ -4,6 +4,16 @@ import { WIDTH, HEIGHT } from './config/constants.js';
 // Dev admin panel — Ctrl+Shift+D to toggle
 import './ui/dev-panel.js';
 
+// Dev hitbox toggle — Ctrl+Shift+H
+import { toggleDebugHitboxes } from './config/constants.js';
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'H') {
+    e.preventDefault();
+    const state = toggleDebugHitboxes();
+    console.log(`DEBUG_HITBOXES: ${state}`);
+  }
+});
+
 import Boot            from './scenes/Boot.js';
 import Attract         from './scenes/Attract.js';
 import CaptureScene    from './scenes/CaptureScene.js';
