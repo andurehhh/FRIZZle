@@ -79,7 +79,7 @@ export const MASCOT_FACE_SIZE = 40;    // px — face photo circle diameter
 export const MASCOT_FACE_X   = 18;     // px — face X offset (positive = right)
 export const MASCOT_FACE_Y   = -8;   // px — face Y offset (negative = above center)
 // Collectible spawn rates — adjust to control how often chips appear
-export const CHIP_GAP_CHANCE  = 0.45;  // chance a column pipe gets a chip in its gap
+export const CHIP_GAP_CHANCE  = 0.40;  // chance a column pipe gets a chip in its gap
 export const CHIP_FREE_CHANCE = 0.25;  // chance a free-space chip spawns between obstacles
 
 // Collectible sizing — adjust these to change the in-game logo size

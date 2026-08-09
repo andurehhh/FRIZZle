@@ -31,7 +31,7 @@ const config = {
     default: 'arcade',
     arcade: {
       gravity: { y: 0 },
-      debug: true,  // shows hitboxes for mascot + all physics bodies — flip to false for production
+      debug: false,
     },
   },
   scene: [
