@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { WIDTH, HEIGHT, COLORS, FONT_TITLE, FONT_BODY } from '../config/constants.js';
+import Leaderboard from '../state/leaderboard.js';
 
 /**
- * Attract — idle screen.
- * "Press any key" → title slides up, mode selector box animates in from below.
+ * Attract — title screen.
+ * Layout: top 1/3 = title, middle 1/3 = big penguin, bottom 1/3 = text + footer.
+ * Share button (left) and Leaderboard button (right) in footer area.
  */
 export default class Attract extends Phaser.Scene {
   constructor() {
@@ -12,91 +14,235 @@ export default class Attract extends Phaser.Scene {
 
   create() {
     this._modeBoxOpen = false;
+    this._leaderboardOpen = false;
 
     // --- Background ---
-    this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COLORS.awsNavy);
-    this._buildParticles();
-    this._spawnRoamingCharacters();
+    const bg = this.add.image(WIDTH / 2, HEIGHT / 2, 'ice-bg')
+      .setDisplaySize(WIDTH, HEIGHT);
 
-    // --- Title (white, snowy) ---
-    this._title = this.add.text(WIDTH / 2, HEIGHT / 2 - 100, 'FRIZZLE', {
-      fontSize: '72px',
-      fontFamily: FONT_TITLE,
-      color: '#FFFFFF',
-    }).setOrigin(0.5);
+    // --- Title BGM ---
+    try {
+      if (this.cache.audio.exists('title-bgm')) {
+        this._titleBgm = this.sound.add('title-bgm', { volume: 0.35, loop: true });
+        this._titleBgm.play();
+      }
+    } catch (e) {}
 
+    // --- Title logo (top 1/3) ---
+    this._title = this.add.image(WIDTH / 2, HEIGHT * 0.17, 'title-logo')
+      .setDisplaySize(550, 130);
+
+    // --- AWS SBG badge (top-right) ---
+    const awsBadge = this.add.image(WIDTH - 80, 30, 'awssbg-logo1').setDisplaySize(36, 36).setTintFill(0xffad5ccf)
+      .setInteractive({ useHandCursor: true });
+    awsBadge.on('pointerdown', () => window.open('https://www.facebook.com/profile.php?id=61584279257151', '_blank'));
+    this.add.text(WIDTH - 80, 55, 'Powered by\nAWS SBG PUP-BC', {
+      fontSize: '15px',
+      fontFamily: FONT_BODY,
+      color: '#555555',
+      align: 'center',
+    }).setOrigin(0.5, 0);
+
+    // --- Big penguin mascot (middle 1/3) ---
+    this._penguin = this.add.image(WIDTH / 2, HEIGHT * 0.47, 'penguin-idle')
+      .setDisplaySize(200, 200);
+
+    // Flap animation
+    this._flapTimer = this.time.addEvent({
+      delay: 400,
+      loop: true,
+      callback: () => {
+        const isIdle = this._penguin.texture.key === 'penguin-idle';
+        this._penguin.setTexture(isIdle ? 'penguin-up' : 'penguin-idle');
+      },
+    });
+
+    // Gentle bob
     this.tweens.add({
-      targets: this._title,
-      scaleX: { from: 1, to: 1.02 },
-      scaleY: { from: 1, to: 1.02 },
-      duration: 1500,
+      targets: this._penguin,
+      y: HEIGHT * 0.47 - 10,
+      duration: 800,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
 
-    // --- Tagline ---
-    this._tagline = this.add.text(WIDTH / 2, HEIGHT / 2 - 20, 'Play the game and win prizes!', {
+    // --- Bottom 1/3: tagline + prompt ---
+    this._tagline = this.add.text(WIDTH / 2, HEIGHT * 0.70, 'play the game and win prizes', {
       fontSize: '26px',
       fontFamily: FONT_BODY,
-      color: '#B3E5FC',
+      color: '#333333',
     }).setOrigin(0.5);
 
-    // --- "Press any key" prompt ---
-    this._startPrompt = this.add.text(WIDTH / 2, HEIGHT / 2 + 50, 'PRESS ANY KEY TO START', {
+    this._startPrompt = this.add.text(WIDTH / 2, HEIGHT * 0.77, 'PRESS ANY KEY TO START', {
       fontSize: '14px',
       fontFamily: FONT_TITLE,
-      color: '#FF9900',
+      color: '#222222',
     }).setOrigin(0.5);
 
-    this.tweens.add({
+    this._startPromptBlink = this.tweens.add({
       targets: this._startPrompt,
-      alpha: 0.3,
-      duration: 700,
+      alpha: 0.2,
+      duration: 600,
       yoyo: true,
       repeat: -1,
     });
 
-    // --- Footer (full width) ---
-    this.add.rectangle(WIDTH / 2, HEIGHT - 30, WIDTH, 60, 0x111820);
-    this.add.text(WIDTH / 2, HEIGHT - 38, 'Like & Follow to claim prizes!  |  @AWS_SBG', {
-      fontSize: '18px',
+    // --- Footer area ---
+    this.add.rectangle(WIDTH / 2, HEIGHT - 35, WIDTH, 70, 0x111820, 0.8);
+
+    // Share button (bottom-left)
+    const shareBtn = this.add.image(70, HEIGHT - 35, 'icon-share')
+      .setDisplaySize(44, 44)
+      .setInteractive({ useHandCursor: true });
+    shareBtn.on('pointerdown', () => this._onShare());
+    shareBtn.on('pointerover', () => shareBtn.setAlpha(0.7));
+    shareBtn.on('pointerout',  () => shareBtn.setAlpha(1));
+
+    // Leaderboard button (bottom-right)
+    const lbBtn = this.add.image(WIDTH - 70, HEIGHT - 35, 'icon-leaderboard')
+      .setDisplaySize(44, 44)
+      .setInteractive({ useHandCursor: true });
+    lbBtn.on('pointerdown', () => this._showLeaderboard());
+    lbBtn.on('pointerover', () => lbBtn.setAlpha(0.7));
+    lbBtn.on('pointerout',  () => lbBtn.setAlpha(1));
+
+    // Footer text
+    this.add.text(WIDTH / 2, HEIGHT - 45, 'Like & Follow to claim prizes!  |  @AWS Student Builder Group - PUP Binan', {
+      fontSize: '16px',
+      fontFamily: FONT_BODY,
+      color: '#999999',
+    }).setOrigin(0.5);
+    this.add.text(WIDTH / 2, HEIGHT - 22, 'SPACE/TAP = flap  |  ESC = pause', {
+      fontSize: '14px',
       fontFamily: FONT_BODY,
       color: '#666666',
     }).setOrigin(0.5);
-    this.add.text(WIDTH / 2, HEIGHT - 14, 'SPACE/TAP = flap  |  ESC = pause', {
-      fontSize: '16px',
+
+    this.add.text(WIDTH / 2, HEIGHT - 5, 'Developed by Andurehhh | Assets by Riyle Lhane Mapanoo', {
+      fontSize: '12px',
       fontFamily: FONT_BODY,
-      color: '#444444',
+      color: '#999999',
     }).setOrigin(0.5);
 
-    // --- Mode selector box (hidden, animates in) ---
-    this._modeBox = this.add.container(WIDTH / 2, HEIGHT / 2 + 60).setAlpha(0).setDepth(20);
+    // --- Mode selector box (hidden until key press) ---
+    this._modeBox = this.add.container(WIDTH / 2, HEIGHT * 0.55).setAlpha(0).setDepth(20);
     this._buildModeBox();
 
-    // --- Input: any key/tap opens mode selector ---
+    // --- Leaderboard overlay (hidden) ---
+    this._lbContainer = this.add.container(WIDTH / 2, HEIGHT / 2).setAlpha(0).setDepth(30).setVisible(false);
+
+    // --- Input ---
     this.input.keyboard.on('keydown', this._onFirstKey, this);
-    this.input.once('pointerdown', () => this._showModeBox());
+    this.input.once('pointerdown', () => { if (!this._leaderboardOpen) this._showModeBox(); });
 
-    // --- Dev shortcuts ---
-    this.input.keyboard.on('keydown-ONE',   () => this.scene.start('Level1'));
-    this.input.keyboard.on('keydown-TWO',   () => this.scene.start('Level2'));
-    this.input.keyboard.on('keydown-THREE', () => this.scene.start('Level3'));
+    // Dev shortcuts
+    this.input.keyboard.on('keydown-ONE',   () => { this._stopTitleBgm(); this.scene.start('Level1'); });
+    this.input.keyboard.on('keydown-TWO',   () => { this._stopTitleBgm(); this.scene.start('Level2'); });
+    this.input.keyboard.on('keydown-THREE', () => { this._stopTitleBgm(); this.scene.start('Level3'); });
+  }
 
-    this.add.text(12, 8, 'DEV: 1/2/3', {
-      fontSize: '14px',
-      fontFamily: FONT_BODY,
-      color: '#222222',
+  // ---------------------------------------------------------------------------
+  // Share
+  // ---------------------------------------------------------------------------
+
+  _onShare() {
+    // Try native Web Share API (works on mobile/kiosk with HTTPS)
+    if (navigator.share) {
+      navigator.share({
+        title: 'Frizzle - Flappy Game',
+        text: 'I played Frizzle at the AWS SBG event! Can you beat my score?',
+        url: window.location.href,
+      }).catch(() => {});
+    } else {
+      // Fallback: copy URL to clipboard
+      navigator.clipboard?.writeText(window.location.href);
+      // Brief visual feedback
+      const msg = this.add.text(WIDTH / 2, HEIGHT - 80, 'Link copied!', {
+        fontSize: '16px', fontFamily: FONT_BODY, color: '#00FF41',
+      }).setOrigin(0.5).setDepth(50);
+      this.tweens.add({ targets: msg, alpha: 0, delay: 1500, duration: 500, onComplete: () => msg.destroy() });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Leaderboard overlay
+  // ---------------------------------------------------------------------------
+
+  async _showLeaderboard() {
+    if (this._leaderboardOpen) {
+      this._hideLeaderboard();
+      return;
+    }
+    this._leaderboardOpen = true;
+
+    const c = this._lbContainer;
+    c.removeAll(true);
+    c.setVisible(true);
+
+    // Backdrop
+    const bg = this.add.rectangle(0, 0, 500, 450, 0x0A0F18, 0.95).setStrokeStyle(2, 0x555555);
+    c.add(bg);
+
+    // Title
+    c.add(this.add.text(0, -190, 'LEADERBOARD', { fontSize: '16px', fontFamily: FONT_TITLE, color: '#FF9900' }).setOrigin(0.5));
+
+    // Load scores
+    let scores = [];
+    try { scores = await Leaderboard.getScores(); } catch (e) {}
+
+    if (scores.length === 0) {
+      c.add(this.add.text(0, 0, 'No scores yet!', { fontSize: '22px', fontFamily: FONT_BODY, color: '#666666' }).setOrigin(0.5));
+    } else {
+      // Header
+      const hY = -155;
+      c.add(this.add.text(-200, hY, '#', { fontSize: '16px', fontFamily: FONT_BODY, color: '#888888' }));
+      c.add(this.add.text(-170, hY, 'NAME', { fontSize: '16px', fontFamily: FONT_BODY, color: '#888888' }));
+      c.add(this.add.text(50,   hY, 'SCORE', { fontSize: '16px', fontFamily: FONT_BODY, color: '#888888' }));
+      c.add(this.add.text(140,  hY, 'DATE', { fontSize: '16px', fontFamily: FONT_BODY, color: '#888888' }));
+
+      scores.forEach((entry, i) => {
+        const rowY = -125 + i * 30;
+        const color = i < 3 ? '#00FF41' : '#CCCCCC';
+        c.add(this.add.text(-200, rowY, `${i + 1}.`, { fontSize: '18px', fontFamily: FONT_BODY, color }));
+        const name = entry.name.length > 12 ? entry.name.slice(0, 11) + '.' : entry.name;
+        c.add(this.add.text(-170, rowY, name, { fontSize: '18px', fontFamily: FONT_BODY, color }));
+        c.add(this.add.text(50,   rowY, `${entry.score}`, { fontSize: '18px', fontFamily: FONT_BODY, color }));
+        const d = new Date(entry.date);
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const dateStr = `${months[d.getMonth()]} ${d.getDate()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+        c.add(this.add.text(140, rowY, dateStr, { fontSize: '16px', fontFamily: FONT_BODY, color: '#666666' }));
+      });
+    }
+
+    // Close button
+    const closeBtn = this.add.text(0, 195, 'CLOSE', { fontSize: '12px', fontFamily: FONT_TITLE, color: '#FF9900' })
+      .setOrigin(0.5).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerdown', () => this._hideLeaderboard());
+    c.add(closeBtn);
+
+    // Animate in
+    this.tweens.add({ targets: c, alpha: 1, duration: 300, ease: 'Cubic.easeOut' });
+  }
+
+  _hideLeaderboard() {
+    this._leaderboardOpen = false;
+    this.tweens.add({
+      targets: this._lbContainer,
+      alpha: 0,
+      duration: 200,
+      onComplete: () => this._lbContainer.setVisible(false),
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Mode box show animation
+  // Mode selector
   // ---------------------------------------------------------------------------
 
   _onFirstKey(event) {
     if (['1','2','3'].includes(event.key)) return;
     if (event.ctrlKey || event.shiftKey) return;
+    if (this._leaderboardOpen) { this._hideLeaderboard(); return; }
     this._showModeBox();
   }
 
@@ -104,129 +250,80 @@ export default class Attract extends Phaser.Scene {
     if (this._modeBoxOpen) return;
     this._modeBoxOpen = true;
 
-    // Fade out prompt
-    this.tweens.add({ targets: this._startPrompt, alpha: 0, duration: 200 });
+    // Fade out and kill prompt permanently
+    this._startPromptBlink?.stop();
+    this._startPrompt.setAlpha(0).setVisible(false);
+    this._startPrompt.setDepth(0);
 
-    // Slide title + tagline up
-    this.tweens.add({
-      targets: this._title,
-      y: this._title.y - 70,
-      duration: 450,
-      ease: 'Cubic.easeOut',
-    });
-    this.tweens.add({
-      targets: this._tagline,
-      y: this._tagline.y - 70,
-      duration: 450,
-      ease: 'Cubic.easeOut',
-    });
+    // Slide title up, shrink penguin slightly
+    this.tweens.add({ targets: this._title, y: this._title.y - 40, duration: 400, ease: 'Cubic.easeOut' });
+    this.tweens.add({ targets: this._penguin, y: this._penguin.y - 30, scaleX: 0.8, scaleY: 0.8, duration: 400, ease: 'Cubic.easeOut' });
+    this.tweens.add({ targets: this._tagline, alpha: 0, duration: 300 });
 
-    // Mode box slides up from below and fades in
-    this._modeBox.y = HEIGHT / 2 + 100;
+    // Mode box slides in
+    this._modeBox.y = HEIGHT * 0.6 + 30;
     this.tweens.add({
       targets: this._modeBox,
       alpha: 1,
-      y: HEIGHT / 2 + 20,
+      y: HEIGHT * 0.6 - 10,
       duration: 500,
       ease: 'Back.easeOut',
       delay: 200,
-      onComplete: () => {
-        // Start the default blink on Level Mode button
-        this._startBlinkOn(this._levelsBtnBg);
-      },
+      onComplete: () => this._startBlinkOn(this._levelsBtnBg),
     });
   }
-
-  // ---------------------------------------------------------------------------
-  // Mode box content
-  // ---------------------------------------------------------------------------
 
   _buildModeBox() {
     const box = this._modeBox;
 
-    // Backdrop — subtle white/grey border, not orange
-    const bg = this.add.rectangle(0, 0, 460, 260, 0x0A0F18, 0.95)
-      .setStrokeStyle(2, 0x444444);
+    const bg = this.add.rectangle(0, 0, 440, 275, 0x1A2A3A, 0.92).setStrokeStyle(2, 0x555555);
     box.add(bg);
 
-    // Title
-    const modeTitle = this.add.text(0, -100, 'SELECT MODE', {
-      fontSize: '14px',
-      fontFamily: FONT_TITLE,
-      color: '#FFFFFF',
-    }).setOrigin(0.5);
+    const modeTitle = this.add.text(0, -82, 'SELECT MODE', { fontSize: '14px', fontFamily: FONT_TITLE, color: '#FFFFFF' }).setOrigin(0.5);
     box.add(modeTitle);
 
-    // --- LEVEL MODE button ---
-    this._levelsBtnBg = this.add.rectangle(0, -35, 320, 50, COLORS.awsOrange)
-      .setInteractive({ useHandCursor: true });
-    const levelsTxt = this.add.text(0, -35, 'LEVEL MODE', {
-      fontSize: '12px',
-      fontFamily: FONT_TITLE,
-      color: '#FFFFFF',
-    }).setOrigin(0.5);
-    box.add([this._levelsBtnBg, levelsTxt]);
+    // LEVEL MODE
+    this._levelsBtnBg = this.add.rectangle(0, -25, 300, 48, COLORS.awsOrange).setInteractive({ useHandCursor: true });
+    const levelsTxt = this.add.text(0, -25, 'LEVEL MODE', { fontSize: '12px', fontFamily: FONT_TITLE, color: '#FFFFFF' }).setOrigin(0.5);
+    const levelsSub = this.add.text(0, 12, 'Clear 3 levels - earn candy!', { fontSize: '18px', fontFamily: FONT_BODY, color: '#AAAAAA' }).setOrigin(0.5);
+    box.add([this._levelsBtnBg, levelsTxt, levelsSub]);
 
-    // Subtext — more spacing below button
-    const levelsSub = this.add.text(0, 4, 'Clear 3 levels - earn candy!', {
-      fontSize: '18px',
-      fontFamily: FONT_BODY,
-      color: '#AAAAAA',
-    }).setOrigin(0.5);
-    box.add(levelsSub);
-
-    this._levelsBtnBg.on('pointerdown', () => this.scene.start('CaptureScene', { destination: 'Level1' }));
+    this._levelsBtnBg.on('pointerdown', () => { this._stopTitleBgm(); this.scene.start('CaptureScene', { destination: 'Level1' }); });
     this._levelsBtnBg.on('pointerover', () => this._startBlinkOn(this._levelsBtnBg));
     this._levelsBtnBg.on('pointerout',  () => this._stopBlink(this._levelsBtnBg));
 
-    // --- ENDLESS MODE button ---
-    this._endlessBtnBg = this.add.rectangle(0, 65, 320, 50, 0x00AA44)
-      .setInteractive({ useHandCursor: true });
-    const endlessTxt = this.add.text(0, 65, 'ENDLESS MODE', {
-      fontSize: '12px',
-      fontFamily: FONT_TITLE,
-      color: '#FFFFFF',
-    }).setOrigin(0.5);
-    box.add([this._endlessBtnBg, endlessTxt]);
+    // ENDLESS MODE
+    this._endlessBtnBg = this.add.rectangle(0, 60, 300, 48, 0x00AA44).setInteractive({ useHandCursor: true });
+    const endlessTxt = this.add.text(0, 60, 'ENDLESS MODE', { fontSize: '12px', fontFamily: FONT_TITLE, color: '#FFFFFF' }).setOrigin(0.5);
+    const endlessSub = this.add.text(0, 97, 'Top 10 wins SWAG!', { fontSize: '18px', fontFamily: FONT_BODY, color: '#AAAAAA' }).setOrigin(0.5);
+    box.add([this._endlessBtnBg, endlessTxt, endlessSub]);
 
-    // Subtext
-    const endlessSub = this.add.text(0, 104, 'Top 10 wins SWAG!', {
-      fontSize: '18px',
-      fontFamily: FONT_BODY,
-      color: '#AAAAAA',
-    }).setOrigin(0.5);
-    box.add(endlessSub);
-
-    this._endlessBtnBg.on('pointerdown', () => this.scene.start('CaptureScene', { destination: 'Endless' }));
+    this._endlessBtnBg.on('pointerdown', () => { this._stopTitleBgm(); this.scene.start('CaptureScene', { destination: 'Endless' }); });
     this._endlessBtnBg.on('pointerover', () => this._startBlinkOn(this._endlessBtnBg));
     this._endlessBtnBg.on('pointerout',  () => this._stopBlink(this._endlessBtnBg));
 
-    // Keyboard shortcuts
-    this.input.keyboard.on('keydown-L', () => {
-      if (this._modeBoxOpen) this.scene.start('CaptureScene', { destination: 'Level1' });
-    });
-    this.input.keyboard.on('keydown-E', () => {
-      if (this._modeBoxOpen) this.scene.start('CaptureScene', { destination: 'Endless' });
-    });
+    this.input.keyboard.on('keydown-L', () => { if (this._modeBoxOpen) { this._stopTitleBgm(); this.scene.start('CaptureScene', { destination: 'Level1' }); } });
+    this.input.keyboard.on('keydown-E', () => { if (this._modeBoxOpen) { this._stopTitleBgm(); this.scene.start('CaptureScene', { destination: 'Endless' }); } });
   }
 
   // ---------------------------------------------------------------------------
-  // Button blink effect
+  // Audio
+  // ---------------------------------------------------------------------------
+
+  _stopTitleBgm() {
+    try { this._titleBgm?.stop(); this._titleBgm?.destroy(); this._titleBgm = null; } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------------------
+  // Button blink
   // ---------------------------------------------------------------------------
 
   _startBlinkOn(btn) {
-    // Stop any existing blink on both buttons
     this._stopBlink(this._levelsBtnBg);
     this._stopBlink(this._endlessBtnBg);
-
-    // Start blink tween on this button
     btn._blinkTween = this.tweens.add({
-      targets: btn,
-      alpha: 0.4,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
+      targets: btn, alpha: 0.4, duration: 500,
+      yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
   }
 
@@ -238,73 +335,10 @@ export default class Attract extends Phaser.Scene {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Background characters
-  // ---------------------------------------------------------------------------
-
-  _spawnRoamingCharacters() {
-    for (let i = 0; i < 3; i++) {
-      const mascot = this.add.circle(
-        Phaser.Math.Between(0, WIDTH), Phaser.Math.Between(100, HEIGHT - 100),
-        18, COLORS.awsOrange, 0.12
-      );
-      this.tweens.add({
-        targets: mascot,
-        x: Phaser.Math.Between(0, WIDTH),
-        y: Phaser.Math.Between(100, HEIGHT - 100),
-        duration: Phaser.Math.Between(6000, 12000),
-        repeat: -1, yoyo: true, ease: 'Sine.easeInOut',
-        delay: Phaser.Math.Between(0, 4000),
-      });
-    }
-
-    for (let i = 0; i < 2; i++) {
-      const enemy = this.add.rectangle(
-        Phaser.Math.Between(0, WIDTH), Phaser.Math.Between(100, HEIGHT - 100),
-        28, 22, 0x111111, 0.15
-      );
-      const eye1 = this.add.rectangle(enemy.x - 5, enemy.y - 2, 4, 6, COLORS.matrixGreen, 0.15);
-      const eye2 = this.add.rectangle(enemy.x + 5, enemy.y - 2, 4, 6, COLORS.matrixGreen, 0.15);
-
-      this.tweens.add({
-        targets: enemy,
-        x: Phaser.Math.Between(0, WIDTH),
-        y: Phaser.Math.Between(100, HEIGHT - 100),
-        duration: Phaser.Math.Between(8000, 15000),
-        repeat: -1, yoyo: true, ease: 'Sine.easeInOut',
-        delay: Phaser.Math.Between(2000, 6000),
-        onUpdate: () => {
-          eye1.x = enemy.x - 5; eye1.y = enemy.y - 2;
-          eye2.x = enemy.x + 5; eye2.y = enemy.y - 2;
-        },
-      });
-    }
-  }
-
-  _buildParticles() {
-    for (let i = 0; i < 10; i++) {
-      const flake = this.add.circle(
-        Phaser.Math.Between(0, WIDTH), Phaser.Math.Between(0, HEIGHT),
-        Phaser.Math.Between(2, 4), COLORS.iceBlue, 0.3
-      );
-      this.tweens.add({
-        targets: flake, y: HEIGHT + 10, x: `+=${Phaser.Math.Between(-30, 30)}`,
-        duration: Phaser.Math.Between(4000, 8000), repeat: -1,
-        delay: Phaser.Math.Between(0, 4000),
-        onRepeat: (_, t) => { t.x = Phaser.Math.Between(0, WIDTH); t.y = -10; },
-      });
-    }
-    for (let i = 0; i < 8; i++) {
-      const dot = this.add.rectangle(
-        Phaser.Math.Between(0, WIDTH), Phaser.Math.Between(0, HEIGHT),
-        3, 12, COLORS.matrixGreen, 0.3
-      );
-      this.tweens.add({
-        targets: dot, y: HEIGHT + 20,
-        duration: Phaser.Math.Between(2000, 4500), repeat: -1,
-        delay: Phaser.Math.Between(0, 3000),
-        onRepeat: (_, t) => { t.x = Phaser.Math.Between(0, WIDTH); t.y = -20; },
-      });
-    }
+  shutdown() {
+    // Stop title BGM when leaving this scene
+    try { this._titleBgm?.stop(); this._titleBgm?.destroy(); } catch (e) {}
+    // Also stop all sounds in case anything is lingering
+    try { this.sound.stopAll(); } catch (e) {}
   }
 }

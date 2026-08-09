@@ -11,6 +11,7 @@ import {
   ENDLESS_START_SPEED, ENDLESS_MAX_SPEED,
   ENDLESS_START_GAP, ENDLESS_MIN_GAP,
   DATABIT_SCORE, FONT_TITLE, FONT_BODY,
+  CHIP_GAP_CHANCE, CHIP_FREE_CHANCE,
 } from '../config/constants.js';
 
 /**
@@ -34,9 +35,14 @@ export default class Endless extends Phaser.Scene {
     this._themeManager = new ThemeManager(this, THEME.ICE, { alternates: true });
     this._themeManager.on('themechange', this._onThemeChange, this);
 
-    // --- Background ---
+    // --- Background: scrolling ice-bg (same as levels) at 80% opacity ---
+    this._bgImage1 = this.add.image(WIDTH / 2, HEIGHT / 2, 'ice-bg')
+      .setDisplaySize(WIDTH, HEIGHT).setAlpha(0.8);
+    this._bgImage2 = this.add.image(WIDTH + WIDTH / 2, HEIGHT / 2, 'ice-bg')
+      .setDisplaySize(WIDTH, HEIGHT).setFlipX(true).setAlpha(0.8);
+
     this._bg = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT,
-      THEME_CONFIG[THEME.ICE].bgColor);
+      THEME_CONFIG[THEME.ICE].bgColor).setAlpha(0);
     this._buildParticles(THEME.ICE);
 
     // --- State ---
@@ -49,8 +55,7 @@ export default class Endless extends Phaser.Scene {
 
     this._spawnTimer       = 0;
     this._firstSpawnDelay  = 1200;
-    this._chipTimer        = 0;
-    this._chipInterval     = Phaser.Math.Between(2800, 4200);
+    this._chipSpawnAfterObs = false;
     this._monsterTimer     = 0;
     this._monsterInterval  = Phaser.Math.Between(3500, 5500);
     this._scoreTickTimer   = 0; // accumulates ms for time-based scoring
@@ -68,6 +73,9 @@ export default class Endless extends Phaser.Scene {
     PhotoPool.getRandomPhotos(10).then(photos => {
       this._facePool = photos;
     }).catch(() => {});
+
+    // --- Audio ---
+    this._setupEndlessAudio();
 
     // --- HUD ---
     this._scoreText = this.add.text(24, 28, 'SCORE: 0', {
@@ -100,6 +108,15 @@ export default class Endless extends Phaser.Scene {
     }
     if (this._paused) return;
 
+    // Scroll background
+    const { speed: currentSpeed } = this._getDifficulty();
+    const bgSpeed = currentSpeed * 0.3;
+    const bgDx = bgSpeed / 60;
+    this._bgImage1.x -= bgDx;
+    this._bgImage2.x -= bgDx;
+    if (this._bgImage1.x <= -WIDTH / 2) this._bgImage1.x = this._bgImage2.x + WIDTH;
+    if (this._bgImage2.x <= -WIDTH / 2) this._bgImage2.x = this._bgImage1.x + WIDTH;
+
     this._elapsedMs += delta;
     this._themeManager.update(delta);
     this._mascot.update(time, delta);
@@ -118,7 +135,7 @@ export default class Endless extends Phaser.Scene {
       return;
     }
 
-    const mascotBounds = this._mascot.getBounds();
+    const mascotBounds = this._mascot.getHitBounds();
     const { speed, gap } = this._getDifficulty();
 
     // --- Obstacles ---
@@ -129,6 +146,19 @@ export default class Endless extends Phaser.Scene {
     if (this._spawnTimer >= threshold) {
       this._spawnTimer = 0;
       this._spawnObstacle(speed, gap);
+      this._chipSpawnAfterObs = true;
+    }
+
+    // Free chip at midpoint between obstacles
+    if (this._chipSpawnAfterObs && this._spawnTimer >= threshold * 0.5) {
+      this._chipSpawnAfterObs = false;
+      if (Math.random() < CHIP_FREE_CHANCE) {
+        const margin = 80;
+        const y = Phaser.Math.Between(margin, HEIGHT - margin);
+        const theme = this._themeManager.theme;
+        const col = new Collectible(this, WIDTH + 60, y, speed, theme);
+        this._collectibles.push(col);
+      }
     }
 
     for (let i = this._obstacles.length - 1; i >= 0; i--) {
@@ -138,14 +168,7 @@ export default class Endless extends Phaser.Scene {
       if (obs.isOffscreen()) { obs.destroy(); this._obstacles.splice(i, 1); }
     }
 
-    // --- Chips ---
-    this._chipTimer += delta;
-    if (this._chipTimer >= this._chipInterval) {
-      this._chipTimer    = 0;
-      this._chipInterval = Phaser.Math.Between(2800, 4200);
-      this._spawnFreeChip(speed);
-    }
-
+    // --- Chips (collected from within pipe gaps) ---
     for (let i = this._collectibles.length - 1; i >= 0; i--) {
       const col = this._collectibles[i];
       col.update();
@@ -205,6 +228,7 @@ export default class Endless extends Phaser.Scene {
 
     if (this._paused) {
       this.physics.pause();
+      this.sound.pauseAll();
       this._pauseOverlay = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x000000, 0.7).setDepth(50);
       this._pauseText = this.add.text(WIDTH / 2, HEIGHT / 2 - 20, 'PAUSED', {
         fontSize: '36px',
@@ -218,6 +242,7 @@ export default class Endless extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(51);
     } else {
       this.physics.resume();
+      this.sound.resumeAll();
       this._pauseOverlay?.destroy();
       this._pauseText?.destroy();
       this._pauseHint?.destroy();
@@ -257,6 +282,15 @@ export default class Endless extends Phaser.Scene {
 
     const obs = new Obstacle(this, WIDTH + 60, gapY, gap, speed, type, theme, cfg);
     this._obstacles.push(obs);
+
+    // Spawn chip in gap of columns
+    if (type === 'column' && Math.random() < CHIP_GAP_CHANCE) {
+      const chipMargin = 20;
+      const halfGap = gap / 2 - chipMargin;
+      const chipY = gapY + Phaser.Math.Between(-halfGap, halfGap);
+      const col = new Collectible(this, WIDTH + 60, chipY, speed, theme);
+      this._collectibles.push(col);
+    }
   }
 
   _pickObstacleType() {
@@ -266,21 +300,6 @@ export default class Endless extends Phaser.Scene {
     if (roll < 0.55) return OBSTACLE_TYPE.COLUMN;
     if (roll < 0.78) return OBSTACLE_TYPE.MOUNTAIN_TOP;
     return OBSTACLE_TYPE.MOUNTAIN_BOT;
-  }
-
-  _spawnFreeChip(speed) {
-    const theme  = this._themeManager.theme;
-    const margin = 80;
-
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const y = Phaser.Math.Between(margin, HEIGHT - margin);
-      const chip = new Collectible(this, WIDTH + 60, y, speed, theme);
-      if (!chip.overlapsObstacles(this._obstacles)) {
-        this._collectibles.push(chip);
-        return;
-      }
-      chip.destroy();
-    }
   }
 
   _spawnMonster(speed) {
@@ -319,6 +338,10 @@ export default class Endless extends Phaser.Scene {
 
     const mon = new GlitchMonster(this, speed * 1.3, 'wavy', theme, avoidZone, faceUrl);
     this._monsters.push(mon);
+
+    // Enemy appear sound
+    try { if (this.cache.audio.exists('enemy')) this.sound.play('enemy', { volume: 0.4 }); }
+    catch (e) {}
   }
 
   // ---------------------------------------------------------------------------
@@ -327,6 +350,11 @@ export default class Endless extends Phaser.Scene {
 
   _spawnCollectFX(col) {
     this.cameras.main.flash(100, 255, 153, 0, true);
+
+    // Pickup sound
+    try { if (this.cache.audio.exists('pickup')) this.sound.play('pickup', { volume: 0.5 }); }
+    catch (e) {}
+
     const txt = this.add.text(col._gfx.x, col._gfx.y - 10, `+${DATABIT_SCORE}`, {
       fontSize: '20px',
       fontFamily: 'monospace',
@@ -349,9 +377,53 @@ export default class Endless extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   _onThemeChange(newTheme, cfg) {
-    this._bg.setFillStyle(cfg.bgColor);
+    if (newTheme === THEME.MATRIX) {
+      this._bgImage1.setTexture('glitch-bg').setFlipX(false);
+      this._bgImage2.setTexture('glitch-bg').setFlipX(true);
+    } else {
+      this._bgImage1.setTexture('ice-bg').setFlipX(false);
+      this._bgImage2.setTexture('ice-bg').setFlipX(true);
+    }
     this._particleObjects?.forEach(p => p.destroy());
     this._buildParticles(newTheme);
+
+    // Audio: theme switch handling
+    try {
+      if (newTheme === THEME.MATRIX) {
+        // Transition sound only on first switch
+        if (!this._transitionPlayed) {
+          this._transitionPlayed = true;
+          if (this.cache.audio.exists('transition')) {
+            this.sound.play('transition', { volume: 0.5 });
+          }
+        }
+
+        // Pause snowy hill
+        if (this._bgMusic && this._bgMusic.isPlaying) {
+          this._bgMusic.pause();
+        }
+
+        // Play glitch audio
+        this.time.delayedCall(400, () => {
+          if (this.cache.audio.exists('glitch') && !this._gameOver) {
+            this._glitchSound = this.sound.add('glitch', { volume: 0.3 });
+            this._glitchSound.play();
+          }
+        });
+
+      } else {
+        // Back to ice — stop glitch, resume snowy hill
+        if (this._glitchSound) {
+          this._glitchSound.stop();
+          this._glitchSound.destroy();
+          this._glitchSound = null;
+        }
+
+        if (this._bgMusic && this._bgMusic.isPaused) {
+          this._bgMusic.resume();
+        }
+      }
+    } catch (e) {}
   }
 
   _buildParticles(theme) {
@@ -388,6 +460,30 @@ export default class Endless extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
+  // Audio
+  // ---------------------------------------------------------------------------
+
+  _setupEndlessAudio() {
+    try {
+      this._transitionPlayed = false;
+      this._glitchSound = null;
+
+      // Start with snowy hill looping
+      if (this.cache.audio.exists('snowy-hill')) {
+        this._bgMusic = this.sound.add('snowy-hill', { volume: 0.25, loop: true });
+        this._bgMusic.play();
+      }
+    } catch (e) {}
+  }
+
+  _stopEndlessAudio() {
+    try {
+      if (this._bgMusic) { this._bgMusic.stop(); this._bgMusic.destroy(); this._bgMusic = null; }
+      if (this._glitchSound) { this._glitchSound.stop(); this._glitchSound.destroy(); this._glitchSound = null; }
+    } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------------------
   // Game Over
   // ---------------------------------------------------------------------------
 
@@ -396,6 +492,7 @@ export default class Endless extends Phaser.Scene {
     this._gameOver = true;
     this._mascot.die();
     this.cameras.main.shake(250, 0.01);
+    this._stopEndlessAudio();
 
     this.time.delayedCall(1000, () => {
       this.scene.start('NameInput', { score: this._score });

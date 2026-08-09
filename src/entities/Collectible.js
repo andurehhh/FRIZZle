@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, THEME, DEBUG_HITBOXES, CHIP_COLORS } from '../config/constants.js';
+import { DEBUG_HITBOXES, CHIP_COLORS, CHIP_LOGO_SIZE, CHIP_BUBBLE_SIZE } from '../config/constants.js';
 
 /**
  * Collectible — the SBG chip token the player flies through to win a level.
@@ -10,27 +10,31 @@ import { COLORS, THEME, DEBUG_HITBOXES, CHIP_COLORS } from '../config/constants.
  *   overlaps() reads gfx.x / gfx.y so hitbox always matches the visual.
  */
 export default class Collectible {
-  constructor(scene, x, y, speed, theme = THEME.ICE) {
+  constructor(scene, x, y, speed, theme = 'ice') {
     this._scene     = scene;
     this._speed     = speed;
-    this._theme     = theme;
     this._collected = false;
     this._size      = 36;
 
     // Pick a random color from the chip palette
     this._chipColor = Phaser.Utils.Array.GetRandom(CHIP_COLORS);
 
-    this._gfx = scene.add.graphics();
-    // Position the graphics object at world coords
-    this._gfx.x = x;
-    this._gfx.y = y;
-    // Draw chip centered on (0,0) — gfx.x/y is the world position
-    this._draw();
+    // Use the AWS SBG logo image with color tint instead of drawn graphics
+    this._logoImage = scene.add.image(x, y, 'awssbg-logo');
+    // Set scale explicitly so tweens operate relative to this base scale
+    const baseScale = CHIP_LOGO_SIZE / this._logoImage.width;
+    this._logoImage.setScale(baseScale);
+    this._logoImage.setTint(this._chipColor);
 
-    // Bob tween moves gfx.y up and down — still world Y, just oscillating
-    this._bobOffset = 0;
+    // Glow bubble behind the logo for visibility
+    this._bubble = scene.add.circle(x, y, CHIP_BUBBLE_SIZE, this._chipColor, 0.25);
+
+    // Keep a gfx reference for position tracking (overlaps check uses _gfx.x/y)
+    this._gfx = this._logoImage;
+
+    // Bob tween
     this._tween = scene.tweens.add({
-      targets: this._gfx,
+      targets: [this._logoImage, this._bubble],
       y: y + 10,
       duration: 700,
       ease: 'Sine.easeInOut',
@@ -38,11 +42,21 @@ export default class Collectible {
       repeat: -1,
     });
 
-    // Pulse scale
+    // Spin tween — continuous slow rotation
+    this._spinTween = scene.tweens.add({
+      targets: this._logoImage,
+      angle: 360,
+      duration: 3000,
+      repeat: -1,
+      ease: 'Linear',
+    });
+
+    // Pulse scale — relative to base scale
+    const pulseMax = baseScale * 1.15;
     this._pulseTween = scene.tweens.add({
-      targets: this._gfx,
-      scaleX: 1.12,
-      scaleY: 1.12,
+      targets: [this._logoImage, this._bubble],
+      scaleX: { from: baseScale, to: pulseMax },
+      scaleY: { from: baseScale, to: pulseMax },
       duration: 500,
       ease: 'Sine.easeInOut',
       yoyo: true,
@@ -51,73 +65,14 @@ export default class Collectible {
   }
 
   // ---------------------------------------------------------------------------
-
-  _draw() {
-    const g        = this._gfx;
-    const s        = this._size;
-    const hs       = s / 2;
-    const isMatrix = this._theme === THEME.MATRIX;
-
-    // Draw centered on (0,0) — gfx.x/y handles world position
-    const x = 0;
-    const y = 0;
-
-    const bodyColor = this._chipColor;
-    const pinColor  = isMatrix ? 0x00FF41 : COLORS.iceBlue;
-    const faceColor = isMatrix ? 0x000000 : 0x232F3E;
-    const glowColor = isMatrix ? 0x00FF41 : COLORS.iceBlue;
-
-    g.clear();
-
-    // Glow halo
-    g.fillStyle(glowColor, 0.18);
-    g.fillCircle(x, y, hs + 14);
-
-    // Pin legs — left
-    g.fillStyle(pinColor, 1);
-    const pinW = 10, pinH = 5;
-    g.fillRect(x - hs - pinW, y - 10, pinW, pinH);
-    g.fillRect(x - hs - pinW, y - 1,  pinW, pinH);
-    g.fillRect(x - hs - pinW, y + 8,  pinW, pinH);
-
-    // Pin legs — right
-    g.fillRect(x + hs, y - 10, pinW, pinH);
-    g.fillRect(x + hs, y - 1,  pinW, pinH);
-    g.fillRect(x + hs, y + 8,  pinW, pinH);
-
-    // Chip body
-    g.fillStyle(bodyColor, 1);
-    g.fillRoundedRect(x - hs, y - hs, s, s, 6);
-
-    // Face inset
-    g.fillStyle(faceColor, 0.85);
-    g.fillRoundedRect(x - hs + 6, y - hs + 6, s - 12, s - 12, 4);
-
-    // AWS smile arc
-    g.lineStyle(2, this._chipColor, 1);
-    g.beginPath();
-    g.arc(x, y + 2, 8, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false);
-    g.strokePath();
-
-    // Eyes
-    g.fillStyle(this._chipColor, 1);
-    g.fillCircle(x - 5, y - 4, 2.5);
-    g.fillCircle(x + 5, y - 4, 2.5);
-
-    // SBG pixel label
-    g.fillStyle(this._chipColor, 0.7);
-    g.fillRect(x - 8, y + 12, 4, 3);
-    g.fillRect(x - 2, y + 12, 4, 3);
-    g.fillRect(x + 4, y + 12, 4, 3);
-  }
-
-  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
   update() {
-    // Move the graphics object itself — gfx.x is always the true world X
-    this._gfx.x -= this._speed / 60;
+    // Move the logo + bubble
+    this._logoImage.x -= this._speed / 60;
+    this._bubble.x = this._logoImage.x;
+    this._bubble.y = this._logoImage.y;
   }
 
   /**
@@ -144,7 +99,7 @@ export default class Collectible {
    * Uses a moderate buffer so chips don't visually touch pipe edges.
    */
   overlapsObstacles(obstacles) {
-    const buffer = 30; // moderate buffer around solid areas
+    const buffer = CHIP_BUBBLE_SIZE + 20; // bubble radius + extra clearance
     const cx = this._gfx.x;
     const cy = this._gfx.y;
 
@@ -191,11 +146,12 @@ export default class Collectible {
     this._collected = true;
     this._tween?.stop();
     this._pulseTween?.stop();
+    this._spinTween?.stop();
 
     this._scene.tweens.add({
-      targets: this._gfx,
-      scaleX: 2.2,
-      scaleY: 2.2,
+      targets: [this._logoImage, this._bubble],
+      scaleX: this._logoImage.scaleX * 2.2,
+      scaleY: this._logoImage.scaleY * 2.2,
       alpha: 0,
       duration: 280,
       ease: 'Cubic.easeOut',
@@ -211,7 +167,9 @@ export default class Collectible {
   destroy() {
     this._tween?.stop();
     this._pulseTween?.stop();
+    this._spinTween?.stop();
     this._debugGfx?.destroy();
-    this._gfx.destroy();
+    this._logoImage?.destroy();
+    this._bubble?.destroy();
   }
 }

@@ -1,51 +1,52 @@
 import Phaser from 'phaser';
-import { GRAVITY, FLAP_VELOCITY, COLORS } from '../config/constants.js';
+import { GRAVITY, FLAP_VELOCITY, COLORS, MASCOT_BODY_SIZE, MASCOT_FACE_SIZE, MASCOT_FACE_X, MASCOT_FACE_Y } from '../config/constants.js';
 
 /**
- * Mascot — the player character.
+ * Mascot — the player character using real penguin sprites.
  *
- * Visuals:
- *   - Orange circle body
- *   - Face slot: either the player's captured photo (circular texture)
- *     or a white placeholder circle if no photo was taken
- *   - Eye dot for orientation
+ * Structure (matching mockup):
+ *   - Penguin body sprite (idle/up/down based on velocity)
+ *   - Circular face photo on top of the head (if captured)
+ *   - Face is slightly overlapping the top of the body — like a hat/head
+ *
+ * The face photo is already cropped to a circle by the camera overlay,
+ * so no mask is needed. It's a child of the container so it rotates
+ * and moves perfectly with the body.
  */
 export default class Mascot extends Phaser.GameObjects.Container {
-  /** @param {Phaser.Scene} scene */
   constructor(scene) {
     const startX = 220;
     const startY = 360;
     super(scene, startX, startY);
 
-    // --- Visuals ---
-    this.body_circle = scene.add.circle(0, 0, 28, COLORS.awsOrange);
-    this.add(this.body_circle);
+    // --- Penguin body sprite ---
+    this._bodySprite = scene.add.image(0, 12, 'penguin-idle');
+    this._bodySprite.setDisplaySize(MASCOT_BODY_SIZE, MASCOT_BODY_SIZE);
+    this.add(this._bodySprite);
 
-    // Face slot — use captured photo if available, else white placeholder
+    // --- Face photo (circular, sits on top of the penguin head) ---
     const hasPhoto = scene.textures.exists('player-face');
+    this._hasPhoto = hasPhoto;
 
     if (hasPhoto) {
-      // Face fills the entire mascot body — photo is already circular from capture
-      // No mask needed since the source image is pre-cropped to a circle
-      this._faceImage = scene.add.image(0, 0, 'player-face');
-      this._faceImage.setDisplaySize(56, 56);
+      this._faceImage = scene.add.image(MASCOT_FACE_X, MASCOT_FACE_Y, 'player-face');
+      this._faceImage.setDisplaySize(MASCOT_FACE_SIZE, MASCOT_FACE_SIZE);
       this.add(this._faceImage);
-    } else {
-      // Placeholder white circle
-      this.face_slot = scene.add.circle(6, -4, 12, COLORS.white);
-      this.eye_dot   = scene.add.circle(10, -6, 4, 0x333333);
-      this.add([this.face_slot, this.eye_dot]);
     }
 
-    this._hasPhoto = hasPhoto;
     scene.add.existing(this);
 
     // --- Physics ---
+    // Hitbox covers only the penguin body, NOT the face photo above
+    // Body sprite is at y=12, so offset the hitbox to start at the penguin's head
     scene.physics.world.enable(this);
     this.body.setCollideWorldBounds(false);
     this.body.setGravityY(GRAVITY);
-    this.body.setSize(44, 44);
-    this.body.setOffset(-22, -22);
+    const hitW = MASCOT_BODY_SIZE * 0.5;
+    const hitH = MASCOT_BODY_SIZE * 0.6;
+    this.body.setSize(hitW, hitH);
+    // Offset so hitbox is centered on the penguin body (which sits at y+12)
+    this.body.setOffset(-hitW / 2, -hitH / 2 + 12);
 
     // --- Input ---
     this._cursors  = scene.input.keyboard.createCursorKeys();
@@ -54,9 +55,14 @@ export default class Mascot extends Phaser.GameObjects.Container {
 
     this._isDead = false;
     this._flapCooldown = 0;
+
+    // --- Audio ---
+    // Weighted pool: flap1 and flap2 are common, flap3 is rare
+    this._flapSounds = ['flap1', 'flap1', 'flap1', 'flap1','flap1','flap1','flap1', 'flap2', 'flap2', 'flap2', 'flap2', 'flap2', 'flap2', 'flap2', 'flap2', 'flap3'];
+    this._deathSounds = ['death1', 'death2'];
+    this._flapSoundChance = 0.20; // 1 in 4 flaps plays a sound
   }
 
-  /** Called each frame by the active scene. */
   update(time, delta) {
     if (this._isDead) return;
 
@@ -68,8 +74,18 @@ export default class Mascot extends Phaser.GameObjects.Container {
 
     if (flapPressed) this._flap();
 
-    // Rotate to match velocity
-    const angle = Phaser.Math.Clamp(this.body.velocity.y * 0.06, -25, 60);
+    // Swap sprite frame based on velocity
+    const vy = this.body.velocity.y;
+    if (vy < -50) {
+      this._bodySprite.setTexture('penguin-up');
+    } else if (vy > 80) {
+      this._bodySprite.setTexture('penguin-down');
+    } else {
+      this._bodySprite.setTexture('penguin-idle');
+    }
+
+    // Rotate slightly to match velocity
+    const angle = Phaser.Math.Clamp(vy * 0.04, -20, 45);
     this.setAngle(angle);
   }
 
@@ -78,22 +94,47 @@ export default class Mascot extends Phaser.GameObjects.Container {
     if (this._flapCooldown > 0) return;
     this.body.setVelocityY(FLAP_VELOCITY);
     this._flapCooldown = 120;
+
+    // Random flap sound — only plays ~25% of the time so it's not annoying
+    if (Math.random() < this._flapSoundChance) {
+      const key = Phaser.Utils.Array.GetRandom(this._flapSounds);
+      try { if (this.scene.cache.audio.exists(key)) this.scene.sound.play(key, { volume: 0.5 }); }
+      catch (e) {}
+    }
   }
 
   die() {
     if (this._isDead) return;
     this._isDead = true;
     this.body.setVelocityX(0);
-    this.body_circle.setFillStyle(0xFF3333);
+    this._bodySprite.setTint(0xFF3333);
+
+    // Random death sound — always plays
+    const key = Phaser.Utils.Array.GetRandom(this._deathSounds);
+    try { if (this.scene.cache.audio.exists(key)) this.scene.sound.play(key, { volume: 0.7 }); }
+    catch (e) {}
   }
 
   get isDead() { return this._isDead; }
+
+  /**
+   * Returns the hitbox bounds (just the penguin body, not the face photo).
+   * Used by obstacle/monster/chip collision checks.
+   */
+  getHitBounds() {
+    return {
+      x: this.x + this.body.offset.x,
+      y: this.y + this.body.offset.y,
+      width: this.body.width,
+      height: this.body.height,
+    };
+  }
 
   reset() {
     this._isDead = false;
     this.setPosition(220, 360);
     this.setAngle(0);
     this.body.setVelocity(0, 0);
-    this.body_circle.setFillStyle(COLORS.awsOrange);
+    this._bodySprite.clearTint();
   }
 }

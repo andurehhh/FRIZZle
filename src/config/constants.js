@@ -69,15 +69,31 @@ export const DATABIT_SCORE = 20;
 export const LEADERBOARD_SIZE = 10;
 export const LEADERBOARD_MIN_SCORE = 0; // set after playtesting
 
-// Collectible chip colors — randomized each spawn
+// Mascot sizing — tweak these to adjust proportions
+// MASCOT_BODY_SIZE: width & height of the penguin sprite in-game
+// MASCOT_FACE_SIZE: diameter of the circular face photo
+// MASCOT_FACE_X: horizontal offset of face (positive = right)
+// MASCOT_FACE_Y: vertical offset of face from center (negative = higher up)
+export const MASCOT_BODY_SIZE = 100;   // px — penguin sprite display size
+export const MASCOT_FACE_SIZE = 40;    // px — face photo circle diameter
+export const MASCOT_FACE_X   = 18;     // px — face X offset (positive = right)
+export const MASCOT_FACE_Y   = -8;   // px — face Y offset (negative = above center)
+// Collectible spawn rates — adjust to control how often chips appear
+export const CHIP_GAP_CHANCE  = 0.45;  // chance a column pipe gets a chip in its gap
+export const CHIP_FREE_CHANCE = 0.25;  // chance a free-space chip spawns between obstacles
+
+// Collectible sizing — adjust these to change the in-game logo size
+export const CHIP_LOGO_SIZE   = 40;   // px — logo image display size
+export const CHIP_BUBBLE_SIZE = 74;   // px — glow bubble radius behind the logo
+
 // When you swap to the AWS logo PNG, these become unused
 export const CHIP_COLORS = [
   0xFF9900,  // AWS Orange
-  0x00C3FF,  // Cyan
-  0x00FF41,  // Matrix Green
-  0xFF6B6B,  // Coral Red
-  0xA855F7,  // Purple
-  0xFFD700,  // Gold
+  0x2E73B8,  // Cyan
+  0x3F8624,  // Matrix Green
+  0x527FFF,  // Pink ata
+  0x7AA116,  // Purple
+  0xCD222E,  // Red
 ];
 
 // Photo pool
@@ -85,7 +101,7 @@ export const PHOTO_POOL_MAX = 20;
 
 // Debug — set to true to draw hitboxes as colored overlays during testing
 // RED = obstacle  |  BLUE = chip  |  MAGENTA = monster
-export const DEBUG_HITBOXES = false;
+export const DEBUG_HITBOXES = true;
 export const DEBUG_COLORS = {
   OBSTACLE:    0xFF0000,
   COLLECTIBLE: 0x00AAFF,

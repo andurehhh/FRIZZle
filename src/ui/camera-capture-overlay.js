@@ -85,15 +85,15 @@ export default class CameraCaptureOverlay {
           margin: 6px;
         }
         #camera-overlay .btn-capture {
-          background: #FF9900;
-          color: #232F3E;
+          background: #00AA44;
+          color: #FFFFFF;
         }
         #camera-overlay .btn-skip {
           background: #333;
           color: #888;
         }
         #camera-overlay .btn-last {
-          background: #00AA44;
+          background: #FF9900;
           color: #FFF;
         }
         #camera-overlay .btn:hover { opacity: 0.85; }
@@ -117,10 +117,12 @@ export default class CameraCaptureOverlay {
       <div class="video-wrapper">
         <video id="cam-video" autoplay playsinline muted></video>
       </div>
-      <div>
-        <button class="btn btn-capture" id="cam-capture">CAPTURE</button>
-        ${this._hasLastPhoto ? '<button class="btn btn-last" id="cam-last">USE LAST PHOTO</button>' : ''}
-        <button class="btn btn-skip" id="cam-skip">NO THANKS</button>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+        <button class="btn btn-capture" id="cam-capture">TAKE PHOTO</button>
+        <div style="display:flex;gap:10px;">
+          ${this._hasLastPhoto ? '<button class="btn btn-last" id="cam-last">USE LAST PHOTO</button>' : ''}
+          <button class="btn btn-skip" id="cam-skip">NO THANKS</button>
+        </div>
       </div>
       <div class="disclosure">
         Your photo may appear as an enemy for other players today.

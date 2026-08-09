@@ -133,7 +133,7 @@ export default class LevelTransition extends Phaser.Scene {
     const sub = this.add.text(WIDTH / 2, HEIGHT / 2 + 60, 'GET READY', {
       fontSize: '28px',
       fontFamily: FONT_BODY,
-      color: '#FFFFFF',
+      color: '#333333',
     }).setOrigin(0.5).setAlpha(0);
 
     // Animate in

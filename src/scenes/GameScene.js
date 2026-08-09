@@ -7,6 +7,7 @@ import ThemeManager from '../systems/ThemeManager.js';
 import {
   WIDTH, HEIGHT, COLORS, THEME, THEME_CONFIG,
   OBSTACLE_INTERVAL, FONT_TITLE, FONT_BODY,
+  CHIP_GAP_CHANCE, CHIP_FREE_CHANCE,
 } from '../config/constants.js';
 
 /**
@@ -49,8 +50,16 @@ export default class GameScene extends Phaser.Scene {
     this._themeManager.on('themechange', this._onThemeChange, this);
 
     // --- Background ---
+    // Scrolling background: ice-bg or glitch-bg depending on initial theme
+    const bgKey = this.initialTheme === THEME.MATRIX ? 'glitch-bg' : 'ice-bg';
+    this._bgImage1 = this.add.image(WIDTH / 2, HEIGHT / 2, bgKey)
+      .setDisplaySize(WIDTH, HEIGHT).setAlpha(0.8);
+    this._bgImage2 = this.add.image(WIDTH + WIDTH / 2, HEIGHT / 2, bgKey)
+      .setDisplaySize(WIDTH, HEIGHT)
+      .setFlipX(true).setAlpha(0.8);
+
     this._bg = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT,
-      THEME_CONFIG[this.initialTheme].bgColor);
+      THEME_CONFIG[this.initialTheme].bgColor).setAlpha(0); // keep for theme switch overlay
     this._buildParticles(this.initialTheme);
 
     // --- State ---
@@ -63,7 +72,7 @@ export default class GameScene extends Phaser.Scene {
     this._spawnTimer       = 0;
     this._firstSpawnDelay  = 1400;
     this._chipTimer        = 0;
-    this._chipInterval     = Phaser.Math.Between(3500, 5500);
+    this._chipSpawnAfterObs = false; // flag: spawn a free chip between obstacles
     this._monsterTimer     = 0;
     this._monsterInterval  = Phaser.Math.Between(4000, 6000);
 
@@ -96,6 +105,31 @@ export default class GameScene extends Phaser.Scene {
     this._paused = false;
     this._pauseOverlay = null;
     this._escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+
+    // --- Level audio ---
+    this._setupLevelAudio();
+  }
+
+  _setupLevelAudio() {
+    try {
+      this._transitionPlayed = false;
+      this._glitchSwitchCount = 0;
+
+      // Start snowy hill for ice theme levels, glitch for matrix
+      if (this.initialTheme === 'matrix') {
+        // Level 2: just play glitch, no transition
+        if (this.cache.audio.exists('glitch')) {
+          this._bgMusic = this.sound.add('glitch', { volume: 0.3 });
+          this._bgMusic.play();
+        }
+      } else {
+        // Ice levels: play snowy hill looping
+        if (this.cache.audio.exists('snowy-hill')) {
+          this._bgMusic = this.sound.add('snowy-hill', { volume: 0.25, loop: true });
+          this._bgMusic.play();
+        }
+      }
+    } catch (e) {}
   }
 
   update(time, delta) {
@@ -107,6 +141,19 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
     if (this._paused) return;
+
+    // Scroll background
+    const bgSpeed = this.obstacleSpeed * 0.3; // bg scrolls slower than obstacles (parallax)
+    const bgDx = bgSpeed / 60;
+    this._bgImage1.x -= bgDx;
+    this._bgImage2.x -= bgDx;
+    // Reset positions for infinite loop
+    if (this._bgImage1.x <= -WIDTH / 2) {
+      this._bgImage1.x = this._bgImage2.x + WIDTH;
+    }
+    if (this._bgImage2.x <= -WIDTH / 2) {
+      this._bgImage2.x = this._bgImage1.x + WIDTH;
+    }
 
     // Theme tick
     this._themeManager.update(delta);
@@ -120,7 +167,7 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
-    const mascotBounds = this._mascot.getBounds();
+    const mascotBounds = this._mascot.getHitBounds();
 
     // --- Obstacle spawn timer ---
     this._spawnTimer += delta;
@@ -131,14 +178,20 @@ export default class GameScene extends Phaser.Scene {
     if (this._spawnTimer >= threshold) {
       this._spawnTimer = 0;
       this._spawnObstacle();
+      this._chipSpawnAfterObs = true; // arm the mid-point chip spawn
     }
 
-    // --- Free-floating chip spawn timer ---
-    this._chipTimer += delta;
-    if (this._chipTimer >= this._chipInterval) {
-      this._chipTimer    = 0;
-      this._chipInterval = Phaser.Math.Between(3500, 5500);
-      this._spawnFreeChip();
+    // Spawn a free chip at the midpoint between two obstacles
+    // This guarantees it's in open space (half an interval away from any obstacle)
+    if (this._chipSpawnAfterObs && this._spawnTimer >= threshold * 0.5) {
+      this._chipSpawnAfterObs = false;
+      if (Math.random() < CHIP_FREE_CHANCE) {
+        const margin = 80;
+        const y = Phaser.Math.Between(margin, HEIGHT - margin);
+        const theme = this._themeManager.theme;
+        const col = new Collectible(this, WIDTH + 60, y, this.obstacleSpeed, theme);
+        this._collectibles.push(col);
+      }
     }
 
     // --- Monster spawn timer (only on levels with monsters) ---
@@ -214,10 +267,9 @@ export default class GameScene extends Phaser.Scene {
     this._paused = !this._paused;
 
     if (this._paused) {
-      // Freeze physics
       this.physics.pause();
+      this.sound.pauseAll();
 
-      // Dark overlay + text
       this._pauseOverlay = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x000000, 0.7).setDepth(50);
       this._pauseText = this.add.text(WIDTH / 2, HEIGHT / 2 - 20, 'PAUSED', {
         fontSize: '36px',
@@ -230,8 +282,8 @@ export default class GameScene extends Phaser.Scene {
         color: '#CCCCCC',
       }).setOrigin(0.5).setDepth(51);
     } else {
-      // Resume
       this.physics.resume();
+      this.sound.resumeAll();
       this._pauseOverlay?.destroy();
       this._pauseText?.destroy();
       this._pauseHint?.destroy();
@@ -262,6 +314,15 @@ export default class GameScene extends Phaser.Scene {
       this.obstacleSpeed, type, theme, themeCfg
     );
     this._obstacles.push(obs);
+
+    // Spawn a chip in the gap of column obstacles
+    if (type === 'column' && Math.random() < CHIP_GAP_CHANCE) {
+      const chipMargin = 20;
+      const halfGap = this.gapSize / 2 - chipMargin;
+      const chipY = gapY + Phaser.Math.Between(-halfGap, halfGap);
+      const col = new Collectible(this, WIDTH + 60, chipY, this.obstacleSpeed, theme);
+      this._collectibles.push(col);
+    }
   }
 
   /**
@@ -311,32 +372,10 @@ export default class GameScene extends Phaser.Scene {
 
     const mon = new GlitchMonster(this, speed, pattern, theme, avoidZone);
     this._monsters.push(mon);
-  }
 
-  /**
-   * Tries multiple positions to avoid overlapping existing obstacles.
-   */
-  _spawnFreeChip() {
-    const theme = this._themeManager.theme;
-    const margin = 90;
-    
-    // Try up to 5 positions to find one that doesn't overlap obstacles
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const y = Phaser.Math.Between(margin, HEIGHT - margin);
-      const testChip = new Collectible(this, WIDTH + 60, y, this.obstacleSpeed, theme);
-      
-      if (!testChip.overlapsObstacles(this._obstacles)) {
-        // Clean position found — keep this chip
-        this._collectibles.push(testChip);
-        return;
-      } else {
-        // Position overlaps — destroy test chip and try again
-        testChip.destroy();
-      }
-    }
-    
-    // All 5 attempts failed — skip spawning this chip
-    // (prevents infinite loops when screen is very crowded)
+    // Enemy appear sound
+    try { if (this.cache.audio.exists('enemy')) this.sound.play('enemy', { volume: 0.4 }); }
+    catch (e) {}
   }
 
   /**
@@ -362,6 +401,10 @@ export default class GameScene extends Phaser.Scene {
   _spawnCollectFX(col) {
     this.cameras.main.flash(120, 255, 153, 0, true);
 
+    // Pickup sound
+    try { if (this.cache.audio.exists('pickup')) this.sound.play('pickup', { volume: 0.5 }); }
+    catch (e) {}
+
     const txt = this.add.text(col._gfx.x, col._gfx.y - 10, '+CHIP!', {
       fontSize: '20px',
       fontFamily: 'monospace',
@@ -384,9 +427,65 @@ export default class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   _onThemeChange(newTheme, themeCfg) {
-    this._bg.setFillStyle(themeCfg.bgColor);
+    // Swap background textures
+    if (newTheme === THEME.MATRIX) {
+      this._bgImage1.setTexture('glitch-bg').setFlipX(false);
+      this._bgImage2.setTexture('glitch-bg').setFlipX(true);
+    } else {
+      this._bgImage1.setTexture('ice-bg').setFlipX(false);
+      this._bgImage2.setTexture('ice-bg').setFlipX(true);
+    }
     this._particleObjects?.forEach(p => p.destroy());
     this._buildParticles(newTheme);
+
+    // Audio: handle theme switch
+    try {
+      this._glitchSwitchCount++;
+
+      if (newTheme === THEME.MATRIX) {
+        // Switching TO glitch/matrix
+        // Transition sound plays only on the first glitch switch
+        if (!this._transitionPlayed) {
+          this._transitionPlayed = true;
+          if (this.cache.audio.exists('transition')) {
+            this.sound.play('transition', { volume: 0.5 });
+          }
+        }
+
+        // Pause snowy hill (don't destroy — we'll resume it)
+        if (this._bgMusic && this._bgMusic.key === 'snowy-hill') {
+          this._bgMusic.pause();
+        }
+
+        // Play glitch audio after a brief delay
+        this.time.delayedCall(400, () => {
+          if (this.cache.audio.exists('glitch') && !this._gameOver && !this._levelCleared) {
+            this._glitchSound = this.sound.add('glitch', { volume: 0.3 });
+            this._glitchSound.play();
+          }
+        });
+
+      } else {
+        // Switching BACK to ice/snow
+        // Stop glitch audio
+        if (this._glitchSound) {
+          this._glitchSound.stop();
+          this._glitchSound.destroy();
+          this._glitchSound = null;
+        }
+
+        // Resume snowy hill from where it was paused
+        if (this._bgMusic && this._bgMusic.key === 'snowy-hill' && this._bgMusic.isPaused) {
+          this._bgMusic.resume();
+        } else if (!this._bgMusic || this._bgMusic.key !== 'snowy-hill') {
+          // If snowy hill was never created (shouldn't happen), create it
+          if (this.cache.audio.exists('snowy-hill')) {
+            this._bgMusic = this.sound.add('snowy-hill', { volume: 0.25, loop: true });
+            this._bgMusic.play();
+          }
+        }
+      }
+    } catch (e) {}
   }
 
   _buildParticles(theme) {
@@ -438,6 +537,21 @@ export default class GameScene extends Phaser.Scene {
     this._gemText.setText(`CHIPS: ${this._gemsCollected} / ${this.gemsRequired}`);
   }
 
+  _stopBgMusic() {
+    try {
+      if (this._bgMusic) {
+        this._bgMusic.stop();
+        this._bgMusic.destroy();
+        this._bgMusic = null;
+      }
+      if (this._glitchSound) {
+        this._glitchSound.stop();
+        this._glitchSound.destroy();
+        this._glitchSound = null;
+      }
+    } catch (e) {}
+  }
+
   // ---------------------------------------------------------------------------
   // Game flow
   // ---------------------------------------------------------------------------
@@ -447,6 +561,7 @@ export default class GameScene extends Phaser.Scene {
     this._gameOver = true;
     this._mascot.die();
     this.cameras.main.shake(200, 0.008);
+    this._stopBgMusic();
 
     this.time.delayedCall(900, () => {
       this.scene.start('GameOver', {
@@ -459,15 +574,18 @@ export default class GameScene extends Phaser.Scene {
   _triggerLevelClear() {
     if (this._gameOver || this._levelCleared) return;
     this._levelCleared = true;
+    this._stopBgMusic();
+
+    // Win sound
+    try { if (this.cache.audio.exists('win')) this.sound.play('win', { volume: 0.6 }); }
+    catch (e) {}
 
     // Freeze everything
     this._obstacles.forEach(o => { o._speed = 0; });
     this._collectibles.forEach(c => { c._speed = 0; });
     this._monsters.forEach(m => { m._speed = 0; });
 
-    this._clearLabel.setText(
-      `LEVEL ${this.levelNumber} CLEAR!\nCollect your candy at the booth!`
-    );
+    this._clearLabel.setText(`LEVEL ${this.levelNumber} CLEAR!`);
     this.cameras.main.flash(500, 255, 153, 0);
 
     this.time.delayedCall(3200, () => {
