@@ -101,7 +101,7 @@ export const PHOTO_POOL_MAX = 20;
 
 // Debug — set to true to draw hitboxes as colored overlays during testing
 // RED = obstacle  |  BLUE = chip  |  MAGENTA = monster
-export const DEBUG_HITBOXES = true;
+export const DEBUG_HITBOXES = false;
 export const DEBUG_COLORS = {
   OBSTACLE:    0xFF0000,
   COLLECTIBLE: 0x00AAFF,
